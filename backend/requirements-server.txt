@@ -1,0 +1,26 @@
+# 服务器部署用依赖（Ubuntu 26.04 / Python 3.14 / RTX PRO Blackwell 16G）
+# torch / torchvision 单独从 cu128 源安装（见部署脚本），此处不列。
+# 与 requirements.txt 的区别：不装 bitsandbytes（16G 显存跑 bf16），numpy/pillow/opencv 不钉旧版本
+# 以拿到 3.14 的 wheel；decord 用 stub（仅做图片，不读视频）。
+
+# Web
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+python-multipart==0.0.20
+pydantic==2.10.4
+pydantic-settings==2.7.1
+
+# 模型运行时
+transformers==4.57.1
+accelerate
+peft
+safetensors
+huggingface_hub
+
+# 模型自定义代码（processing_locateanything.py）顶层 import 所需
+numpy
+pillow
+opencv-python-headless
+lmdb
+requests
+packaging

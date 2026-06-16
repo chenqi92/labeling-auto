@@ -1,0 +1,18 @@
+# Web 框架
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+python-multipart==0.0.20
+pydantic==2.10.4
+pydantic-settings==2.7.1
+
+# 模型 / 推理（torch 需按 CUDA 版本单独安装，见 README）
+transformers==4.57.1
+accelerate==1.2.1
+bitsandbytes==0.45.0
+peft==0.14.0
+safetensors
+
+# 图像 / 数值
+Pillow==11.1.0
+numpy==1.26.4
+opencv-python-headless==4.11.0.86
