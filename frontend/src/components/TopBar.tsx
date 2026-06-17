@@ -1,5 +1,5 @@
 import { Download, Cpu, Loader2 } from 'lucide-react'
-import { useStore } from '../store'
+import { useStore, selectImages } from '../store'
 import { loadModel } from '../api'
 import type { ModelState } from '../types'
 
@@ -13,7 +13,7 @@ const STATE_STYLE: Record<ModelState, { dot: string; text: string; label: string
 export default function TopBar({ onExport }: { onExport: () => void }) {
   const model = useStore((s) => s.model)
   const setModel = useStore((s) => s.setModel)
-  const images = useStore((s) => s.images)
+  const images = useStore(selectImages)
   const st = STATE_STYLE[model.state]
 
   const onLoad = async () => {

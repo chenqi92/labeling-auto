@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import time
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
@@ -42,7 +43,7 @@ app.add_middleware(
 # 支持的任务（给前端下拉用）
 TASKS = [
     {"key": "detection", "label": "目标检测（开放词汇）", "needs_query": True,
-     "hint": "逗号分隔多个类别，如：person, car, dog"},
+     "hint": "空格或逗号分隔多个类别，如：人 头盔 person"},
     {"key": "grounding", "label": "短语定位", "needs_query": True,
      "hint": "自然语言短语，如：the red car on the left"},
     {"key": "ocr", "label": "文字检测（OCR）", "needs_query": False,
@@ -165,7 +166,8 @@ def detect(req: DetectRequest) -> DetectResponse:
 
     try:
         if req.task == "detection":
-            cats = [c.strip() for c in query.split(",") if c.strip()]
+            # 兼容半/全角逗号、顿号分隔（前端标签输入已规范化，这里再兜底一次）
+            cats = [c.strip() for c in re.split(r"[，,、]", query) if c.strip()]
             if not cats:
                 raise HTTPException(status_code=400, detail="目标检测需要至少一个类别")
             # 逐类检测，保证每个框带正确标签

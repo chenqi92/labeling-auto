@@ -1,17 +1,25 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Download, X, Loader2 } from 'lucide-react'
-import { useStore } from '../store'
+import { useStore, selectImages, selectClasses, selectActiveProject } from '../store'
 import { exportYolo } from '../api'
 
+const EMPTY_ANN_MAP: Record<string, { x1: number; y1: number; x2: number; y2: number; classId: number }[]> = {}
+
 export default function ExportDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const images = useStore((s) => s.images)
-  const annotations = useStore((s) => s.annotations)
-  const classes = useStore((s) => s.classes)
+  const images = useStore(selectImages)
+  const annotations = useStore((s) => selectActiveProject(s)?.annotations ?? EMPTY_ANN_MAP)
+  const classes = useStore(selectClasses)
+  const projectName = useStore((s) => selectActiveProject(s)?.name ?? 'dataset')
 
   const [name, setName] = useState('dataset')
   const [splitMode, setSplitMode] = useState<'all' | '0.8' | '0.9'>('all')
   const [includeBg, setIncludeBg] = useState(false)
   const [busy, setBusy] = useState(false)
+
+  // 打开导出框时，数据集名默认取当前项目名
+  useEffect(() => {
+    if (open) setName(projectName)
+  }, [open, projectName])
 
   const stats = useMemo(() => {
     const totalBoxes = Object.values(annotations).reduce((s, l) => s + l.length, 0)

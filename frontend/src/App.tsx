@@ -12,16 +12,18 @@ import { useStore } from './store'
 export default function App() {
   const setTasks = useStore((s) => s.setTasks)
   const setModel = useStore((s) => s.setModel)
-  const addImages = useStore((s) => s.addImages)
+  const ensureProject = useStore((s) => s.ensureProject)
+  const importOrphanImages = useStore((s) => s.importOrphanImages)
   const modelState = useStore((s) => s.model.state)
   const [exportOpen, setExportOpen] = useState(false)
 
-  // 初始化：任务列表 + 模型状态 + 后端已存图片（刷新后恢复列表，配合 localStorage 里的标注）
+  // 初始化：保证至少有一个项目；拉任务列表 + 模型状态；把后端已存、未登记到任何项目的图片归位
   useEffect(() => {
+    ensureProject()
     getTasks().then(setTasks).catch(() => undefined)
     getModelStatus().then(setModel).catch(() => undefined)
-    listImages().then(addImages).catch(() => undefined)
-  }, [setTasks, setModel, addImages])
+    listImages().then(importOrphanImages).catch(() => undefined)
+  }, [setTasks, setModel, ensureProject, importOrphanImages])
 
   // 模型加载中时轮询状态
   useEffect(() => {

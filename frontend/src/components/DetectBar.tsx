@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { Play, Layers, Loader2 } from 'lucide-react'
-import { useStore } from '../store'
+import { useStore, selectImages, selectDetect } from '../store'
 import { detect, getModelStatus, loadModel } from '../api'
 import type { ModelStatus, TaskKey } from '../types'
+import TagInput from './TagInput'
 
 /** 确保模型就绪：触发加载并轮询直到 ready / error。 */
 async function ensureModelReady(setModel: (m: ModelStatus) => void) {
@@ -26,9 +27,9 @@ async function ensureModelReady(setModel: (m: ModelStatus) => void) {
 
 export default function DetectBar() {
   const tasks = useStore((s) => s.tasks)
-  const cfg = useStore((s) => s.detect)
+  const cfg = useStore(selectDetect)
   const setDetectConfig = useStore((s) => s.setDetectConfig)
-  const images = useStore((s) => s.images)
+  const images = useStore(selectImages)
   const activeImageId = useStore((s) => s.activeImageId)
   const setModel = useStore((s) => s.setModel)
   const applyDetections = useStore((s) => s.applyDetections)
@@ -41,15 +42,15 @@ export default function DetectBar() {
   const needsQuery = currentTask?.needs_query ?? true
   const hint = currentTask?.hint ?? ''
 
-  const runOne = async (imageId: string) => {
+  const runOne = async (imageId: string, c: typeof cfg) => {
     setBusy(imageId, true)
     try {
       const res = await detect({
         image_id: imageId,
-        query: cfg.query,
-        task: cfg.task,
-        mode: cfg.mode,
-        max_new_tokens: cfg.maxNewTokens,
+        query: c.query,
+        task: c.task,
+        mode: c.mode,
+        max_new_tokens: c.maxNewTokens,
       })
       applyDetections(imageId, res.boxes, true)
     } finally {
@@ -58,7 +59,9 @@ export default function DetectBar() {
   }
 
   const run = async (all: boolean) => {
-    if (needsQuery && !cfg.query.trim()) {
+    // 读取最新配置：标签输入框 onBlur 提交的 chip 会先写入 store，这里取到的就是最终值
+    const c = selectDetect(useStore.getState())
+    if (needsQuery && !c.query.trim()) {
       alert('请先输入检测目标描述')
       return
     }
@@ -71,7 +74,7 @@ export default function DetectBar() {
     try {
       await ensureModelReady(setModel)
       for (const id of targets) {
-        await runOne(id)
+        await runOne(id, c)
       }
     } catch (e) {
       alert(`检测失败：${(e as Error).message}`)
@@ -96,17 +99,27 @@ export default function DetectBar() {
         ))}
       </select>
 
-      <input
-        type="text"
-        value={cfg.query}
-        disabled={!needsQuery}
-        placeholder={needsQuery ? hint : '该任务无需输入'}
-        onChange={(e) => setDetectConfig({ query: e.target.value })}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') run(false)
-        }}
-        className="min-w-0 flex-1 rounded-md border border-slate-300 px-3 py-1.5 text-sm focus:border-indigo-400 focus:outline-none disabled:bg-slate-100 disabled:text-slate-400"
-      />
+      {cfg.task === 'detection' ? (
+        <TagInput
+          value={cfg.query}
+          onChange={(query) => setDetectConfig({ query })}
+          onEnter={() => run(false)}
+          placeholder="输入类别后按空格/回车生成标签，如：人 头盔"
+          className="min-w-0 flex-1"
+        />
+      ) : (
+        <input
+          type="text"
+          value={cfg.query}
+          disabled={!needsQuery}
+          placeholder={needsQuery ? hint : '该任务无需输入'}
+          onChange={(e) => setDetectConfig({ query: e.target.value })}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') run(false)
+          }}
+          className="min-w-0 flex-1 rounded-md border border-slate-300 px-3 py-1.5 text-sm focus:border-indigo-400 focus:outline-none disabled:bg-slate-100 disabled:text-slate-400"
+        />
+      )}
 
       <select
         value={cfg.mode}

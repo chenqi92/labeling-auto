@@ -1,12 +1,15 @@
 import { useRef, useState } from 'react'
 import { ImagePlus, Loader2, Trash2, CheckCircle2 } from 'lucide-react'
-import { useStore } from '../store'
+import { useStore, selectImages, selectActiveProject } from '../store'
 import { uploadImages } from '../api'
+import ProjectSwitcher from './ProjectSwitcher'
+
+const EMPTY_ANN_MAP: Record<string, unknown[]> = {}
 
 export default function Sidebar() {
-  const images = useStore((s) => s.images)
+  const images = useStore(selectImages)
   const activeImageId = useStore((s) => s.activeImageId)
-  const annotations = useStore((s) => s.annotations)
+  const annotations = useStore((s) => selectActiveProject(s)?.annotations ?? EMPTY_ANN_MAP)
   const busy = useStore((s) => s.busy)
   const addImages = useStore((s) => s.addImages)
   const setActiveImage = useStore((s) => s.setActiveImage)
@@ -31,7 +34,10 @@ export default function Sidebar() {
 
   return (
     <aside className="flex w-56 flex-col border-r border-slate-200 bg-white">
-      <div className="p-3">
+      <div className="px-3 pt-3">
+        <ProjectSwitcher />
+      </div>
+      <div className="px-3 pb-3 pt-2">
         <button
           onClick={() => inputRef.current?.click()}
           onDragOver={(e) => {

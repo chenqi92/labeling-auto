@@ -1,10 +1,10 @@
 import { Trash2, Sparkles, Hand, Eraser } from 'lucide-react'
-import { useStore } from '../store'
+import { useStore, selectClasses, selectActiveAnnotations } from '../store'
 
 export default function AnnotationList() {
   const activeImageId = useStore((s) => s.activeImageId)
-  const annotations = useStore((s) => (s.activeImageId ? s.annotations[s.activeImageId] ?? [] : []))
-  const classes = useStore((s) => s.classes)
+  const annotations = useStore(selectActiveAnnotations)
+  const classes = useStore(selectClasses)
   const selectedAnnId = useStore((s) => s.selectedAnnId)
   const setSelected = useStore((s) => s.setSelected)
   const removeAnnotation = useStore((s) => s.removeAnnotation)

@@ -1,11 +1,13 @@
 import { useState } from 'react'
 import { Plus, Pencil, Trash2, Check, X, Tag } from 'lucide-react'
-import { useStore } from '../store'
+import { useStore, selectClasses, selectActiveProject } from '../store'
+
+const EMPTY_ANN_MAP: Record<string, { classId: number }[]> = {}
 
 export default function ClassPanel() {
-  const classes = useStore((s) => s.classes)
+  const classes = useStore(selectClasses)
   const activeClassId = useStore((s) => s.activeClassId)
-  const annotations = useStore((s) => s.annotations)
+  const annotations = useStore((s) => selectActiveProject(s)?.annotations ?? EMPTY_ANN_MAP)
   const setActiveClass = useStore((s) => s.setActiveClass)
   const addClass = useStore((s) => s.addClass)
   const renameClass = useStore((s) => s.renameClass)

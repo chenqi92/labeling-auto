@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react'
-import { useStore } from '../store'
+import { useStore, selectImages, selectClasses, selectActiveAnnotations } from '../store'
 import { colorForIndex, withAlpha } from '../lib/colors'
 import type { Annotation } from '../types'
 
@@ -44,11 +44,9 @@ export default function CanvasEditor() {
   const draftRef = useRef<Box | null>(null)
   const spaceRef = useRef(false)
 
-  const image = useStore((s) => s.images.find((i) => i.id === s.activeImageId) ?? null)
-  const annotations = useStore((s) =>
-    s.activeImageId ? s.annotations[s.activeImageId] ?? [] : [],
-  )
-  const classes = useStore((s) => s.classes)
+  const image = useStore((s) => selectImages(s).find((i) => i.id === s.activeImageId) ?? null)
+  const annotations = useStore(selectActiveAnnotations)
+  const classes = useStore(selectClasses)
   const selectedAnnId = useStore((s) => s.selectedAnnId)
 
   const colorOf = useCallback(
