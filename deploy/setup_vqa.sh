@@ -14,7 +14,7 @@
 #   SERVICE      labeling-auto 的 systemd 服务名（默认 labeling-auto）
 set -uo pipefail
 
-VQA_MODEL="${VQA_MODEL:-qwen2.5vl:7b}"
+VQA_MODEL="${VQA_MODEL:-qwen3.5:9b-q8_0}"   # 任意带 vision 能力的 Ollama 模型，可用环境变量覆盖
 OLLAMA_HOST="${OLLAMA_HOST:-http://127.0.0.1:11434}"
 APP_DIR="${APP_DIR:-/opt/labeling-auto}"
 SERVICE="${SERVICE:-labeling-auto}"

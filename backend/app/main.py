@@ -60,7 +60,7 @@ TASKS = [
     {"key": "inspect", "label": "状态检测 / 巡检（VQA）", "needs_query": True,
      "hint": "问是非判断题，多个用问号或换行分隔，如：航标是否损坏？航标灯是否正常竖立？"},
     {"key": "recognize", "label": "文字识别（OCR）", "needs_query": False,
-     "hint": "用 Qwen2.5-VL 识别图中文字内容，输出文本，无需输入"},
+     "hint": "用视觉模型识别图中文字内容，输出文本，无需输入"},
 ]
 
 

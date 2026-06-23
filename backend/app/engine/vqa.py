@@ -1,4 +1,6 @@
-"""视觉问答（状态判断 / 巡检）引擎：经本机 Ollama 调 Qwen2.5-VL。
+"""视觉问答（状态判断 / 巡检 + 文字识别）引擎：经本机 Ollama 调视觉语言模型(VLM)。
+
+模型由 settings.vqa_model 指定（默认 qwen3.5:9b-q8_0，也可换 qwen2.5vl 等任意带 vision 能力的 Ollama 模型）。
 
 与 LocateAnything 检测分离：
 - 本进程**不加载**任何 VLM 权重，仅通过 HTTP 调用 Ollama（默认 127.0.0.1:11434）。

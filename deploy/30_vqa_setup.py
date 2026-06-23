@@ -12,7 +12,7 @@ import time
 import _ssh
 
 APP = "/opt/labeling-auto"
-VQA_MODEL = os.environ.get("LA_VQA_MODEL", "qwen2.5vl:7b")
+VQA_MODEL = os.environ.get("LA_VQA_MODEL", "qwen3.5:9b-q8_0")
 LOCAL_SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "setup_vqa.sh")
 
 c = _ssh.connect_retry()
