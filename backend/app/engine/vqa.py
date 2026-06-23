@@ -13,6 +13,7 @@ from __future__ import annotations
 import base64
 import io
 import json
+import time
 import urllib.error
 import urllib.request
 
@@ -166,15 +167,31 @@ def _parse(raw: str, questions: list[str]) -> list[dict]:
     return norm
 
 
-def unload() -> None:
-    """让 Ollama 立即卸载 VQA 模型释放显存（keep_alive=0）。
+def unload(timeout: float = 25.0) -> None:
+    """卸载 VQA 模型，并**等到其显存真正释放**后再返回。
 
-    用于检测前腾出显存给 LocateAnything。Ollama 不在线 / 模型本就未加载时静默忽略。
+    用于检测前腾出显存给 LocateAnything。关键：Ollama 收到 keep_alive=0 后是
+    异步卸载（runner 进程退出 + 释放 CUDA 需 1~2 秒），若不等待就加载 LA 会撞 OOM。
+    这里发出 keep_alive=0 后轮询 /api/ps，直到该模型不在已加载列表中再返回。
+    Ollama 不在线 / 模型本就未加载时静默返回，不阻塞。
     """
     try:
         _post("/api/generate", {"model": settings.vqa_model, "keep_alive": 0}, timeout=15)
     except Exception:  # noqa: BLE001
         pass
+    base = settings.ollama_url.rstrip("/")
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            with urllib.request.urlopen(f"{base}/api/ps", timeout=5) as resp:
+                models = json.loads(resp.read().decode("utf-8")).get("models", [])
+        except Exception:  # noqa: BLE001
+            return  # Ollama 不可达，不阻塞检测
+        loaded = [(m.get("model") or m.get("name") or "") for m in models]
+        if settings.vqa_model not in loaded:
+            time.sleep(0.6)  # 给 runner 退出 + CUDA 释放留一点缓冲
+            return
+        time.sleep(0.5)
 
 
 def health() -> dict:
