@@ -75,5 +75,28 @@ class ModelManager:
     def get(self) -> LocateEngine:
         return self.ensure_loaded()
 
+    def unload(self) -> None:
+        """卸载模型并释放显存（与 VQA 模型错峰，避免 16GB 卡上同时常驻导致 OOM）。
+
+        mock 引擎不卸载（无显存占用，且 LA_MOCK 下不应触发真实加载）。
+        """
+        with self._load_lock:
+            eng = self._engine
+            if eng is None or settings.mock:
+                return
+            self._engine = None
+            self._set("unloaded", "已卸载以释放显存给 VQA")
+        try:
+            import gc
+
+            import torch
+
+            del eng
+            gc.collect()
+            torch.cuda.empty_cache()
+            log.info("LocateAnything 已卸载，显存已释放")
+        except Exception:  # noqa: BLE001
+            pass
+
 
 manager = ModelManager()

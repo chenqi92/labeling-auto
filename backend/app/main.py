@@ -159,6 +159,10 @@ def detect(req: DetectRequest) -> DetectResponse:
     if stored is None:
         raise HTTPException(status_code=404, detail="图片不存在")
 
+    # 互斥：检测前先卸载可能占用显存的 VQA 模型，避免 16GB 卡上与 LocateAnything 争用 OOM
+    if settings.vqa_exclusive:
+        vqa.unload()
+
     try:
         engine = manager.get()
     except Exception as e:  # noqa: BLE001
@@ -265,6 +269,10 @@ def inspect(req: InspectRequest) -> InspectResponse:
     if not questions:
         raise HTTPException(status_code=400, detail="请至少输入一个判断问题")
 
+    # 互斥：VQA 前先卸载 LocateAnything 释放显存
+    if settings.vqa_exclusive:
+        manager.unload()
+
     image_bytes = store.get_bytes(req.image_id)
     t0 = time.perf_counter()
     try:
@@ -290,6 +298,11 @@ def recognize(req: RecognizeRequest) -> RecognizeResponse:
     stored = store.get(req.image_id)
     if stored is None:
         raise HTTPException(status_code=404, detail="图片不存在")
+
+    # 互斥：VQA 前先卸载 LocateAnything 释放显存
+    if settings.vqa_exclusive:
+        manager.unload()
+
     image_bytes = store.get_bytes(req.image_id)
     t0 = time.perf_counter()
     try:

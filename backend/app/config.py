@@ -37,6 +37,9 @@ class Settings(BaseSettings):
     vqa_timeout: float = 180.0        # 首次调用需加载模型，留足超时
     vqa_max_image_side: int = 1024    # 送入 VQA 前缩图长边
     vqa_max_new_tokens: int = 512
+    # 16GB 卡上检测(LocateAnything)与 VQA 模型放不下同时常驻：开启后二者互斥，
+    # 用前先卸载对方释放显存（谁用谁加载，切换时有一次重载耗时）。大显存可设为 0 关闭。
+    vqa_exclusive: bool = True
 
     # —— 开发用假引擎（无需 GPU）——
     mock: bool = False

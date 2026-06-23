@@ -166,6 +166,17 @@ def _parse(raw: str, questions: list[str]) -> list[dict]:
     return norm
 
 
+def unload() -> None:
+    """让 Ollama 立即卸载 VQA 模型释放显存（keep_alive=0）。
+
+    用于检测前腾出显存给 LocateAnything。Ollama 不在线 / 模型本就未加载时静默忽略。
+    """
+    try:
+        _post("/api/generate", {"model": settings.vqa_model, "keep_alive": 0}, timeout=15)
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def health() -> dict:
     """探测 Ollama 是否在线、目标模型是否已拉取。"""
     try:
