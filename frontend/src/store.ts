@@ -6,7 +6,9 @@ import type {
   ApiBox,
   ClassDef,
   ImageItem,
+  InspectResponse,
   ModelStatus,
+  RecognizeResponse,
   TaskDef,
   TaskKey,
 } from './types'
@@ -63,6 +65,10 @@ interface State {
   busy: Record<string, boolean>
   model: ModelStatus
   tasks: TaskDef[]
+  // 巡检结果（瞬态，不持久化）：按 imageId 存最近一次 VQA 问答
+  inspections: Record<string, InspectResponse>
+  // 文字识别结果（瞬态，不持久化）：按 imageId 存最近一次 OCR 文本
+  recognitions: Record<string, RecognizeResponse>
 
   // projects
   ensureProject: () => void
@@ -97,6 +103,8 @@ interface State {
   setTasks: (t: TaskDef[]) => void
   setDetectConfig: (patch: Partial<DetectConfig>) => void
   setBusy: (imageId: string, v: boolean) => void
+  setInspection: (imageId: string, res: InspectResponse | null) => void
+  setRecognition: (imageId: string, res: RecognizeResponse | null) => void
 }
 
 // —— 选择器（组件通过它们读取当前项目的数据）——
@@ -127,6 +135,8 @@ export const useStore = create<State>()(
       busy: {},
       model: { state: 'unloaded' },
       tasks: [],
+      inspections: {},
+      recognitions: {},
 
       // —— 项目 ——
       ensureProject: () =>
@@ -415,6 +425,20 @@ export const useStore = create<State>()(
       setDetectConfig: (patch) =>
         set((s) => ({ projects: patchActive(s, (p) => ({ ...p, detect: { ...p.detect, ...patch } })) })),
       setBusy: (imageId, v) => set((s) => ({ busy: { ...s.busy, [imageId]: v } })),
+      setInspection: (imageId, res) =>
+        set((s) => {
+          const next = { ...s.inspections }
+          if (res) next[imageId] = res
+          else delete next[imageId]
+          return { inspections: next }
+        }),
+      setRecognition: (imageId, res) =>
+        set((s) => {
+          const next = { ...s.recognitions }
+          if (res) next[imageId] = res
+          else delete next[imageId]
+          return { recognitions: next }
+        }),
     }),
     {
       name: 'labeling-auto-v1',

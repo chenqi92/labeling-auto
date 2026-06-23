@@ -1,4 +1,4 @@
-export type TaskKey = 'detection' | 'grounding' | 'ocr' | 'gui' | 'point'
+export type TaskKey = 'detection' | 'grounding' | 'ocr' | 'gui' | 'point' | 'inspect' | 'recognize'
 
 export interface ImageItem {
   id: string
@@ -59,4 +59,35 @@ export interface DetectResponse {
   boxes: ApiBox[]
   raw: string
   elapsed_ms: number
+}
+
+/** 状态检测 / 巡检（VQA）一条问答。 */
+export interface InspectAnswer {
+  question: string
+  answer: string // 是 | 否 | 不确定
+  detail: string
+}
+
+export interface InspectResponse {
+  image_id: string
+  answers: InspectAnswer[]
+  model: string
+  raw: string
+  elapsed_ms: number
+}
+
+/** 文字识别（OCR）结果：文字内容。 */
+export interface RecognizeResponse {
+  image_id: string
+  text: string
+  model: string
+  elapsed_ms: number
+}
+
+export interface InspectHealth {
+  ok: boolean
+  model_ready: boolean
+  model: string
+  models?: string[]
+  error?: string
 }

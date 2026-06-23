@@ -1,0 +1,4 @@
+# Shell scripts must stay LF so they run on the Linux deploy target.
+*.sh text eol=lf
+deploy/finish_deploy.sh text eol=lf
+deploy/kill.sh text eol=lf

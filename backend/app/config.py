@@ -30,6 +30,14 @@ class Settings(BaseSettings):
     top_p: float = 0.9
     do_sample: bool = True
 
+    # —— 视觉问答（状态判断/巡检）：经本机 Ollama 调 Qwen2.5-VL，与检测分离 ——
+    ollama_url: str = "http://127.0.0.1:11434"
+    vqa_model: str = "qwen2.5vl:7b"
+    vqa_keep_alive: str = "5m"        # 空闲多久后 Ollama 卸载模型释放显存
+    vqa_timeout: float = 180.0        # 首次调用需加载模型，留足超时
+    vqa_max_image_side: int = 1024    # 送入 VQA 前缩图长边
+    vqa_max_new_tokens: int = 512
+
     # —— 开发用假引擎（无需 GPU）——
     mock: bool = False
 

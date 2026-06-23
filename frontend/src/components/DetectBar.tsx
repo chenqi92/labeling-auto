@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Play, Layers, Loader2 } from 'lucide-react'
 import { useStore, selectImages, selectDetect } from '../store'
-import { detect, getModelStatus, loadModel } from '../api'
+import { detect, getModelStatus, inspect, loadModel, recognizeText } from '../api'
 import type { ModelStatus, TaskKey } from '../types'
 import TagInput from './TagInput'
 
@@ -33,6 +33,8 @@ export default function DetectBar() {
   const activeImageId = useStore((s) => s.activeImageId)
   const setModel = useStore((s) => s.setModel)
   const applyDetections = useStore((s) => s.applyDetections)
+  const setInspection = useStore((s) => s.setInspection)
+  const setRecognition = useStore((s) => s.setRecognition)
   const setBusy = useStore((s) => s.setBusy)
   const busy = useStore((s) => s.busy)
 
@@ -41,18 +43,30 @@ export default function DetectBar() {
   const currentTask = tasks.find((t) => t.key === cfg.task)
   const needsQuery = currentTask?.needs_query ?? true
   const hint = currentTask?.hint ?? ''
+  const isInspect = cfg.task === 'inspect'
+  // 走 Ollama（Qwen2.5-VL）的任务：自管加载/卸载，无需 LocateAnything，也没有 slow/fast 模式
+  const isVlm = cfg.task === 'inspect' || cfg.task === 'recognize'
+  const verb = cfg.task === 'inspect' ? '巡检' : cfg.task === 'recognize' ? '识别' : '检测'
 
   const runOne = async (imageId: string, c: typeof cfg) => {
     setBusy(imageId, true)
     try {
-      const res = await detect({
-        image_id: imageId,
-        query: c.query,
-        task: c.task,
-        mode: c.mode,
-        max_new_tokens: c.maxNewTokens,
-      })
-      applyDetections(imageId, res.boxes, true)
+      if (c.task === 'inspect') {
+        const res = await inspect({ image_id: imageId, query: c.query })
+        setInspection(imageId, res)
+      } else if (c.task === 'recognize') {
+        const res = await recognizeText({ image_id: imageId })
+        setRecognition(imageId, res)
+      } else {
+        const res = await detect({
+          image_id: imageId,
+          query: c.query,
+          task: c.task,
+          mode: c.mode,
+          max_new_tokens: c.maxNewTokens,
+        })
+        applyDetections(imageId, res.boxes, true)
+      }
     } finally {
       setBusy(imageId, false)
     }
@@ -62,7 +76,7 @@ export default function DetectBar() {
     // 读取最新配置：标签输入框 onBlur 提交的 chip 会先写入 store，这里取到的就是最终值
     const c = selectDetect(useStore.getState())
     if (needsQuery && !c.query.trim()) {
-      alert('请先输入检测目标描述')
+      alert(isInspect ? '请先输入要判断的问题' : '请先输入检测目标描述')
       return
     }
     const targets = all ? images.map((i) => i.id) : activeImageId ? [activeImageId] : []
@@ -72,12 +86,13 @@ export default function DetectBar() {
     }
     setRunning(true)
     try {
-      await ensureModelReady(setModel)
+      // VLM 任务走 Ollama（自管加载/卸载），无需等 LocateAnything 就绪
+      if (!isVlm) await ensureModelReady(setModel)
       for (const id of targets) {
         await runOne(id, c)
       }
     } catch (e) {
-      alert(`检测失败：${(e as Error).message}`)
+      alert(`${verb}失败：${(e as Error).message}`)
     } finally {
       setRunning(false)
     }
@@ -121,16 +136,18 @@ export default function DetectBar() {
         />
       )}
 
-      <select
-        value={cfg.mode}
-        onChange={(e) => setDetectConfig({ mode: e.target.value as 'slow' | 'hybrid' | 'fast' })}
-        title="生成模式：slow 最稳，hybrid 平衡，fast 最快"
-        className="rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:border-indigo-400 focus:outline-none"
-      >
-        <option value="slow">slow（稳）</option>
-        <option value="hybrid">hybrid（衡）</option>
-        <option value="fast">fast（快）</option>
-      </select>
+      {!isVlm && (
+        <select
+          value={cfg.mode}
+          onChange={(e) => setDetectConfig({ mode: e.target.value as 'slow' | 'hybrid' | 'fast' })}
+          title="生成模式：slow 最稳，hybrid 平衡，fast 最快"
+          className="rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:border-indigo-400 focus:outline-none"
+        >
+          <option value="slow">slow（稳）</option>
+          <option value="hybrid">hybrid（衡）</option>
+          <option value="fast">fast（快）</option>
+        </select>
+      )}
 
       <button
         onClick={() => run(false)}
@@ -138,7 +155,7 @@ export default function DetectBar() {
         className="flex items-center gap-1.5 rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
       >
         {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-        检测当前
+        {verb}当前
       </button>
       <button
         onClick={() => run(true)}
@@ -146,7 +163,7 @@ export default function DetectBar() {
         className="flex items-center gap-1.5 rounded-md border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-sm font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-50"
       >
         <Layers className="h-4 w-4" />
-        检测全部
+        {verb}全部
       </button>
     </div>
   )

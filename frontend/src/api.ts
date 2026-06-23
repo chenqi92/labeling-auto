@@ -1,4 +1,13 @@
-import type { DetectResponse, ImageItem, ModelStatus, TaskDef, TaskKey } from './types'
+import type {
+  DetectResponse,
+  ImageItem,
+  InspectHealth,
+  InspectResponse,
+  ModelStatus,
+  RecognizeResponse,
+  TaskDef,
+  TaskKey,
+} from './types'
 
 async function jsonOrThrow<T>(res: Response): Promise<T> {
   if (!res.ok) {
@@ -57,6 +66,29 @@ export async function detect(params: DetectParams): Promise<DetectResponse> {
     body: JSON.stringify(params),
   })
   return jsonOrThrow<DetectResponse>(res)
+}
+
+export async function inspect(params: { image_id: string; query: string }): Promise<InspectResponse> {
+  const res = await fetch('/api/inspect', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return jsonOrThrow<InspectResponse>(res)
+}
+
+export async function inspectHealth(): Promise<InspectHealth> {
+  const res = await fetch('/api/inspect/health')
+  return jsonOrThrow<InspectHealth>(res)
+}
+
+export async function recognizeText(params: { image_id: string }): Promise<RecognizeResponse> {
+  const res = await fetch('/api/recognize', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  return jsonOrThrow<RecognizeResponse>(res)
 }
 
 export interface ExportItem {

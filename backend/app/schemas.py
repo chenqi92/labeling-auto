@@ -5,7 +5,7 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
-TaskType = Literal["detection", "grounding", "ocr", "gui", "point"]
+TaskType = Literal["detection", "grounding", "ocr", "gui", "point", "inspect", "recognize"]
 GenMode = Literal["slow", "hybrid", "fast"]
 
 
@@ -43,6 +43,40 @@ class DetectResponse(BaseModel):
     image_id: str
     boxes: list[Box]
     raw: str = ""          # 模型原始输出（调试用）
+    elapsed_ms: int = 0
+
+
+# —— 状态检测 / 巡检（视觉问答）——
+class InspectRequest(BaseModel):
+    image_id: str
+    # 一组是非判断问题；也可用 query 传一整串（按换行/分号/问号拆分）
+    questions: list[str] = Field(default_factory=list)
+    query: str = ""
+
+
+class InspectAnswer(BaseModel):
+    question: str
+    answer: str = "不确定"   # 是 | 否 | 不确定
+    detail: str = ""
+
+
+class InspectResponse(BaseModel):
+    image_id: str
+    answers: list[InspectAnswer]
+    model: str = ""
+    raw: str = ""
+    elapsed_ms: int = 0
+
+
+# —— 文字识别（OCR，输出文字内容而非框）——
+class RecognizeRequest(BaseModel):
+    image_id: str
+
+
+class RecognizeResponse(BaseModel):
+    image_id: str
+    text: str = ""
+    model: str = ""
     elapsed_ms: int = 0
 
 

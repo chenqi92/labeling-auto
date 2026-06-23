@@ -5,6 +5,8 @@ import DetectBar from './components/DetectBar'
 import CanvasEditor from './components/CanvasEditor'
 import ClassPanel from './components/ClassPanel'
 import AnnotationList from './components/AnnotationList'
+import InspectPanel from './components/InspectPanel'
+import RecognizePanel from './components/RecognizePanel'
 import ExportDialog from './components/ExportDialog'
 import { getModelStatus, getTasks, listImages } from './api'
 import { useStore } from './store'
@@ -45,7 +47,9 @@ export default function App() {
             <CanvasEditor />
           </div>
         </main>
-        <aside className="flex w-80 flex-col border-l border-slate-200 bg-white">
+        <aside className="flex w-80 flex-col overflow-y-auto border-l border-slate-200 bg-white">
+          <InspectPanel />
+          <RecognizePanel />
           <ClassPanel />
           <AnnotationList />
         </aside>

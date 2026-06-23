@@ -14,7 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from app.config import settings
 from app.engine.base import DetectParams
 from app.engine.manager import manager
-from app.engine import prompts
+from app.engine import prompts, vqa
 from app.engine.parsing import denorm_box, denorm_point
 from app.schemas import (
     Box,
@@ -22,7 +22,12 @@ from app.schemas import (
     DetectResponse,
     ExportRequest,
     ImageMeta,
+    InspectAnswer,
+    InspectRequest,
+    InspectResponse,
     ModelStatus,
+    RecognizeRequest,
+    RecognizeResponse,
 )
 from app.services.store import store
 from app.services.yolo_export import build_yolo_zip
@@ -46,12 +51,16 @@ TASKS = [
      "hint": "空格或逗号分隔多个类别，如：人 头盔 person"},
     {"key": "grounding", "label": "短语定位", "needs_query": True,
      "hint": "自然语言短语，如：the red car on the left"},
-    {"key": "ocr", "label": "文字检测（OCR）", "needs_query": False,
-     "hint": "检测图中所有文字框，无需输入"},
+    {"key": "ocr", "label": "文字检测（定位框）", "needs_query": False,
+     "hint": "只框出文字位置、不识别内容（要识别文字请用「文字识别」）"},
     {"key": "gui", "label": "GUI 元素定位", "needs_query": True,
      "hint": "界面元素描述，如：the submit button"},
     {"key": "point", "label": "指向（点）", "needs_query": True,
      "hint": "返回点，自动转为小框"},
+    {"key": "inspect", "label": "状态检测 / 巡检（VQA）", "needs_query": True,
+     "hint": "问是非判断题，多个用问号或换行分隔，如：航标是否损坏？航标灯是否正常竖立？"},
+    {"key": "recognize", "label": "文字识别（OCR）", "needs_query": False,
+     "hint": "用 Qwen2.5-VL 识别图中文字内容，输出文本，无需输入"},
 ]
 
 
@@ -230,6 +239,68 @@ def detect(req: DetectRequest) -> DetectResponse:
 
     elapsed = int((time.perf_counter() - t0) * 1000)
     return DetectResponse(image_id=req.image_id, boxes=boxes, raw="\n".join(raw_parts), elapsed_ms=elapsed)
+
+
+def _split_questions(req: InspectRequest) -> list[str]:
+    """问题来源：优先 questions 列表；否则把 query 按换行/分号/问号拆成多条。"""
+    if req.questions:
+        return [q.strip() for q in req.questions if q.strip()]
+    parts = re.split(r"[\n;；?？]+", req.query or "")
+    return [p.strip() for p in parts if p.strip()]
+
+
+@app.get("/api/inspect/health")
+def inspect_health() -> dict:
+    """前端可据此提示「Ollama 未启动 / 视觉模型未拉取」。"""
+    h = vqa.health()
+    return {**h, "model": settings.vqa_model}
+
+
+@app.post("/api/inspect", response_model=InspectResponse)
+def inspect(req: InspectRequest) -> InspectResponse:
+    stored = store.get(req.image_id)
+    if stored is None:
+        raise HTTPException(status_code=404, detail="图片不存在")
+    questions = _split_questions(req)
+    if not questions:
+        raise HTTPException(status_code=400, detail="请至少输入一个判断问题")
+
+    image_bytes = store.get_bytes(req.image_id)
+    t0 = time.perf_counter()
+    try:
+        answers, raw = vqa.inspect(image_bytes, questions)
+    except vqa.VQAError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    except Exception as e:  # noqa: BLE001
+        log.exception("inspect failed")
+        raise HTTPException(status_code=500, detail=f"巡检推理失败：{e}")
+
+    elapsed = int((time.perf_counter() - t0) * 1000)
+    return InspectResponse(
+        image_id=req.image_id,
+        answers=[InspectAnswer(**a) for a in answers],
+        model=settings.vqa_model,
+        raw=raw,
+        elapsed_ms=elapsed,
+    )
+
+
+@app.post("/api/recognize", response_model=RecognizeResponse)
+def recognize(req: RecognizeRequest) -> RecognizeResponse:
+    stored = store.get(req.image_id)
+    if stored is None:
+        raise HTTPException(status_code=404, detail="图片不存在")
+    image_bytes = store.get_bytes(req.image_id)
+    t0 = time.perf_counter()
+    try:
+        text, _raw = vqa.recognize_text(image_bytes)
+    except vqa.VQAError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    except Exception as e:  # noqa: BLE001
+        log.exception("recognize failed")
+        raise HTTPException(status_code=500, detail=f"文字识别失败：{e}")
+    elapsed = int((time.perf_counter() - t0) * 1000)
+    return RecognizeResponse(image_id=req.image_id, text=text, model=settings.vqa_model, elapsed_ms=elapsed)
 
 
 @app.post("/api/export/yolo")

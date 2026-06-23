@@ -24,6 +24,9 @@ Environment=LA_MAX_IMAGE_SIDE=1280
 Environment=LA_DATA_DIR={APP}/data
 Environment=HF_ENDPOINT=https://hf-mirror.com
 Environment=HF_HUB_OFFLINE=1
+Environment=PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+Environment=LA_VQA_MODEL=qwen2.5vl:7b
+Environment=LA_OLLAMA_URL=http://127.0.0.1:11434
 ExecStart={APP}/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000
 Restart=on-failure
 RestartSec=5
