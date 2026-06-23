@@ -149,7 +149,11 @@ export default function DetectBar() {
           value={cfg.query}
           onChange={(query) => setDetectConfig({ query })}
           onEnter={() => run(false)}
-          placeholder="输入类别后按空格/回车生成标签，如：人 头盔"
+          placeholder={
+            isYoloe
+              ? 'YOLOE 建议用英文常见类名，如：boat person car'
+              : '输入类别后按空格/回车生成标签，如：人 头盔'
+          }
           className="min-w-0 flex-1"
         />
       ) : (
