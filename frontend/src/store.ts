@@ -5,6 +5,7 @@ import type {
   Annotation,
   ApiBox,
   ClassDef,
+  EngineDef,
   ImageItem,
   InspectResponse,
   ModelStatus,
@@ -22,11 +23,12 @@ function uid(): string {
 export interface DetectConfig {
   task: TaskKey
   query: string
+  engine: string
   mode: 'slow' | 'hybrid' | 'fast'
   maxNewTokens: number
 }
 
-const DEFAULT_DETECT: DetectConfig = { task: 'detection', query: '', mode: 'slow', maxNewTokens: 1024 }
+const DEFAULT_DETECT: DetectConfig = { task: 'detection', query: '', engine: 'la', mode: 'slow', maxNewTokens: 1024 }
 
 /** 一个项目：自带素材、类别、标注、检测配置，彼此隔离。 */
 export interface Project {
@@ -65,6 +67,7 @@ interface State {
   busy: Record<string, boolean>
   model: ModelStatus
   tasks: TaskDef[]
+  engines: EngineDef[]
   // 巡检结果（瞬态，不持久化）：按 imageId 存最近一次 VQA 问答
   inspections: Record<string, InspectResponse>
   // 文字识别结果（瞬态，不持久化）：按 imageId 存最近一次 OCR 文本
@@ -101,6 +104,7 @@ interface State {
   // misc
   setModel: (m: ModelStatus) => void
   setTasks: (t: TaskDef[]) => void
+  setEngines: (e: EngineDef[]) => void
   setDetectConfig: (patch: Partial<DetectConfig>) => void
   setBusy: (imageId: string, v: boolean) => void
   setInspection: (imageId: string, res: InspectResponse | null) => void
@@ -135,6 +139,7 @@ export const useStore = create<State>()(
       busy: {},
       model: { state: 'unloaded' },
       tasks: [],
+      engines: [],
       inspections: {},
       recognitions: {},
 
@@ -422,6 +427,7 @@ export const useStore = create<State>()(
       setSelected: (annId) => set({ selectedAnnId: annId }),
       setModel: (m) => set({ model: m }),
       setTasks: (t) => set({ tasks: t }),
+      setEngines: (e) => set({ engines: e }),
       setDetectConfig: (patch) =>
         set((s) => ({ projects: patchActive(s, (p) => ({ ...p, detect: { ...p.detect, ...patch } })) })),
       setBusy: (imageId, v) => set((s) => ({ busy: { ...s.busy, [imageId]: v } })),

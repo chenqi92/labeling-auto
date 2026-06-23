@@ -8,11 +8,12 @@ import AnnotationList from './components/AnnotationList'
 import InspectPanel from './components/InspectPanel'
 import RecognizePanel from './components/RecognizePanel'
 import ExportDialog from './components/ExportDialog'
-import { getModelStatus, getTasks, listImages } from './api'
+import { getEngines, getModelStatus, getTasks, listImages } from './api'
 import { useStore } from './store'
 
 export default function App() {
   const setTasks = useStore((s) => s.setTasks)
+  const setEngines = useStore((s) => s.setEngines)
   const setModel = useStore((s) => s.setModel)
   const ensureProject = useStore((s) => s.ensureProject)
   const importOrphanImages = useStore((s) => s.importOrphanImages)
@@ -23,9 +24,10 @@ export default function App() {
   useEffect(() => {
     ensureProject()
     getTasks().then(setTasks).catch(() => undefined)
+    getEngines().then(setEngines).catch(() => undefined)
     getModelStatus().then(setModel).catch(() => undefined)
     listImages().then(importOrphanImages).catch(() => undefined)
-  }, [setTasks, setModel, ensureProject, importOrphanImages])
+  }, [setTasks, setEngines, setModel, ensureProject, importOrphanImages])
 
   // 模型加载中时轮询状态
   useEffect(() => {

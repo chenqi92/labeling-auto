@@ -1,5 +1,6 @@
 import type {
   DetectResponse,
+  EngineDef,
   ImageItem,
   InspectHealth,
   InspectResponse,
@@ -41,6 +42,12 @@ export async function getTasks(): Promise<TaskDef[]> {
   return body.tasks
 }
 
+export async function getEngines(): Promise<EngineDef[]> {
+  const res = await fetch('/api/engines')
+  const body = await jsonOrThrow<{ engines: EngineDef[] }>(res)
+  return body.engines
+}
+
 export async function getModelStatus(): Promise<ModelStatus> {
   const res = await fetch('/api/model/status')
   return jsonOrThrow<ModelStatus>(res)
@@ -55,6 +62,7 @@ export interface DetectParams {
   image_id: string
   query: string
   task: TaskKey
+  engine?: string
   mode?: string | null
   max_new_tokens?: number | null
 }

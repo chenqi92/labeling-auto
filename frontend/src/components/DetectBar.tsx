@@ -27,6 +27,7 @@ async function ensureModelReady(setModel: (m: ModelStatus) => void) {
 
 export default function DetectBar() {
   const tasks = useStore((s) => s.tasks)
+  const engines = useStore((s) => s.engines)
   const cfg = useStore(selectDetect)
   const setDetectConfig = useStore((s) => s.setDetectConfig)
   const images = useStore(selectImages)
@@ -40,13 +41,26 @@ export default function DetectBar() {
 
   const [running, setRunning] = useState(false)
 
+  const engineKey = cfg.engine || 'la'
+  const currentEngine = engines.find((e) => e.key === engineKey)
+  // 当前引擎支持的任务（引擎列表未加载时退回全部任务）
+  const availableTasks = currentEngine ? tasks.filter((t) => currentEngine.tasks.includes(t.key)) : tasks
+  const isYoloe = engineKey.startsWith('yoloe')
+
   const currentTask = tasks.find((t) => t.key === cfg.task)
   const needsQuery = currentTask?.needs_query ?? true
   const hint = currentTask?.hint ?? ''
   const isInspect = cfg.task === 'inspect'
-  // 走 Ollama（Qwen2.5-VL）的任务：自管加载/卸载，无需 LocateAnything，也没有 slow/fast 模式
+  // 走 Ollama 的任务：自管加载/卸载，无需 LocateAnything，也没有 slow/fast 模式
   const isVlm = cfg.task === 'inspect' || cfg.task === 'recognize'
   const verb = cfg.task === 'inspect' ? '巡检' : cfg.task === 'recognize' ? '识别' : '检测'
+
+  // 切换引擎：若当前任务不被新引擎支持，自动切到该引擎的首个任务
+  const changeEngine = (key: string) => {
+    const eng = engines.find((e) => e.key === key)
+    if (eng && !eng.tasks.includes(cfg.task)) setDetectConfig({ engine: key, task: eng.tasks[0] })
+    else setDetectConfig({ engine: key })
+  }
 
   const runOne = async (imageId: string, c: typeof cfg) => {
     setBusy(imageId, true)
@@ -62,6 +76,7 @@ export default function DetectBar() {
           image_id: imageId,
           query: c.query,
           task: c.task,
+          engine: c.engine || 'la',
           mode: c.mode,
           max_new_tokens: c.maxNewTokens,
         })
@@ -86,8 +101,8 @@ export default function DetectBar() {
     }
     setRunning(true)
     try {
-      // VLM 任务走 Ollama（自管加载/卸载），无需等 LocateAnything 就绪
-      if (!isVlm) await ensureModelReady(setModel)
+      // 仅 LocateAnything 引擎的检测/定位类任务需要等 LA 就绪；YOLOE 自带轻量加载，VLM 走 Ollama
+      if (!isVlm && !isYoloe) await ensureModelReady(setModel)
       for (const id of targets) {
         await runOne(id, c)
       }
@@ -102,12 +117,27 @@ export default function DetectBar() {
 
   return (
     <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 bg-white px-4 py-2.5">
+      {engines.length > 0 && (
+        <select
+          value={engineKey}
+          onChange={(e) => changeEngine(e.target.value)}
+          title="检测引擎：LocateAnything 精度高；YOLOE-26 快且轻"
+          className="rounded-md border border-slate-300 bg-slate-50 px-2 py-1.5 text-sm focus:border-indigo-400 focus:outline-none"
+        >
+          {engines.map((en) => (
+            <option key={en.key} value={en.key}>
+              {en.label}
+            </option>
+          ))}
+        </select>
+      )}
+
       <select
         value={cfg.task}
         onChange={(e) => setDetectConfig({ task: e.target.value as TaskKey })}
         className="rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:border-indigo-400 focus:outline-none"
       >
-        {tasks.map((t) => (
+        {availableTasks.map((t) => (
           <option key={t.key} value={t.key}>
             {t.label}
           </option>

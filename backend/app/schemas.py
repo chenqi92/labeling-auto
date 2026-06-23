@@ -32,6 +32,8 @@ class DetectRequest(BaseModel):
     # 检测目标描述：detection/grounding 用逗号分隔的类别或短语；ocr/gui 可留空
     query: str = ""
     task: TaskType = "detection"
+    # 检测引擎：la（LocateAnything）| yoloe-26l | yoloe-26s
+    engine: str = "la"
     mode: Optional[GenMode] = None
     max_new_tokens: Optional[int] = None
     temperature: Optional[float] = None

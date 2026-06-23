@@ -41,6 +41,11 @@ class Settings(BaseSettings):
     # 用前先卸载对方释放显存（谁用谁加载，切换时有一次重载耗时）。大显存可设为 0 关闭。
     vqa_exclusive: bool = True
 
+    # —— YOLOE-26（Ultralytics）开放词汇检测：LocateAnything 之外的可选检测引擎 ——
+    yoloe_weights_dir: str = "/data/ultralytics/weights"
+    yoloe_config_dir: str = "/data/ultralytics"
+    yoloe_conf: float = 0.25          # 检测置信度阈值
+
     # —— 开发用假引擎（无需 GPU）——
     mock: bool = False
 

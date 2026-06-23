@@ -34,6 +34,13 @@ export interface TaskDef {
   hint: string
 }
 
+/** 检测引擎定义（LocateAnything / YOLOE-26 各尺寸）。 */
+export interface EngineDef {
+  key: string
+  label: string
+  tasks: TaskKey[]
+}
+
 export type ModelState = 'unloaded' | 'loading' | 'ready' | 'error'
 
 export interface ModelStatus {

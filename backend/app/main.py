@@ -14,7 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from app.config import settings
 from app.engine.base import DetectParams
 from app.engine.manager import manager
-from app.engine import prompts, vqa
+from app.engine import prompts, vqa, yoloe
 from app.engine.parsing import denorm_box, denorm_point
 from app.schemas import (
     Box,
@@ -72,6 +72,20 @@ def health() -> dict:
 @app.get("/api/tasks")
 def list_tasks() -> dict:
     return {"tasks": TASKS}
+
+
+# 可选检测引擎（给前端引擎选择器用）。tasks = 该引擎支持的任务 key。
+DETECT_ENGINES = [
+    {"key": "la", "label": "LocateAnything-3B（精度高，较慢）",
+     "tasks": ["detection", "grounding", "ocr", "gui", "point", "inspect", "recognize"]},
+    {"key": "yoloe-26l", "label": "YOLOE-26-L（开放词汇，快）", "tasks": ["detection"]},
+    {"key": "yoloe-26s", "label": "YOLOE-26-S（最快）", "tasks": ["detection"]},
+]
+
+
+@app.get("/api/engines")
+def list_engines() -> dict:
+    return {"engines": DETECT_ENGINES}
 
 
 @app.get("/api/model/status", response_model=ModelStatus)
@@ -159,6 +173,35 @@ def detect(req: DetectRequest) -> DetectResponse:
     if stored is None:
         raise HTTPException(status_code=404, detail="图片不存在")
 
+    image = store.get_pil(req.image_id)
+    W, H = stored.width, stored.height
+    query = (req.query or "").strip()
+    engine_key = (req.engine or "la").strip()
+
+    # —— YOLOE-26 引擎：开放词汇检测，自带类别标签，直接返回像素框 ——
+    if yoloe.is_yoloe(engine_key):
+        if req.task != "detection":
+            raise HTTPException(status_code=400, detail="YOLOE 引擎仅支持「目标检测」任务")
+        cats = [c.strip() for c in re.split(r"[，,、]", query) if c.strip()]
+        if not cats:
+            raise HTTPException(status_code=400, detail="目标检测需要至少一个类别")
+        t0 = time.perf_counter()
+        try:
+            dets = yoloe.get(engine_key).detect(image, cats, settings.yoloe_conf)
+        except Exception as e:  # noqa: BLE001
+            log.exception("yoloe detect failed")
+            raise HTTPException(status_code=500, detail=f"YOLOE 推理失败：{e}")
+        boxes = [
+            Box(x1=d.x1, y1=d.y1, x2=d.x2, y2=d.y2, label=d.label or "object", score=d.score)
+            for d in dets
+        ]
+        elapsed = int((time.perf_counter() - t0) * 1000)
+        return DetectResponse(
+            image_id=req.image_id, boxes=boxes,
+            raw=f"yoloe[{engine_key}] {len(boxes)} boxes", elapsed_ms=elapsed,
+        )
+
+    # —— LocateAnything 引擎 ——
     # 互斥：检测前先卸载可能占用显存的 VQA 模型，避免 16GB 卡上与 LocateAnything 争用 OOM
     if settings.vqa_exclusive:
         vqa.unload()
@@ -168,10 +211,7 @@ def detect(req: DetectRequest) -> DetectResponse:
     except Exception as e:  # noqa: BLE001
         raise HTTPException(status_code=503, detail=f"模型加载失败：{e}")
 
-    image = store.get_pil(req.image_id)
-    W, H = stored.width, stored.height
     params = _params(req)
-    query = (req.query or "").strip()
 
     boxes: list[Box] = []
     raw_parts: list[str] = []

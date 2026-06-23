@@ -31,6 +31,15 @@ bash deploy/build_bundle.sh && python deploy/11_upload.py
 python deploy/15_service.py        # 重启服务（如改了 unit/环境变量）
 ```
 
+## 仅配置 YOLOE-26 检测引擎（LocateAnything 之外的可选项）
+
+直接登录服务器跑：`bash /opt/labeling-auto/deploy/setup_yoloe.sh`
+
+做的事：确保 `ultralytics` 已装 → 预取 YOLOE-26 权重（`yoloe-26l/s-seg.pt`）到 `/data/ultralytics/weights`
+→ 触发下载 MobileCLIP2 文本编码器 `mobileclip2_b.ts` 到服务工作目录 `backend/`（否则首次检测会卡在无代理下载）。
+之后前端「引擎」下拉出现 `LocateAnything / YOLOE-26-L / YOLOE-26-S`，可逐图切换。YOLOE 仅做目标检测，
+极小（显存 ~0.5GB）可与其它模型共存。
+
 ## 仅配置 VQA（状态检测/巡检 + 文字识别）
 
 - 远程一键：`python deploy/30_vqa_setup.py`（用 `LA_VQA_MODEL` 覆盖模型，默认 `qwen3.5:9b-q8_0`）
