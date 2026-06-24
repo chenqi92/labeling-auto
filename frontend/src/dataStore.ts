@@ -3,7 +3,7 @@
 import { create } from 'zustand'
 import * as papi from './projectApi'
 import { getEngines, getModelStatus, getTasks } from './api'
-import type { Ann, Cls, DatasetVersion, EngineDef, ModelStatus, ProjectInfo, ProjImage, TaskDef } from './types'
+import type { Ann, Cls, DatasetVersion, EngineDef, InspectResponse, ModelStatus, ProjectInfo, ProjImage, RecognizeResponse, TaskDef } from './types'
 
 const ACTIVE_KEY = 'vislab-active-project'
 
@@ -15,6 +15,8 @@ interface DataState {
   datasets: DatasetVersion[]
   activeImageId: string | null
   anns: Record<string, Ann[]> // 按 imageId 缓存
+  selectedIdx: number | null // 当前图选中的标注序号
+  activeClassId: number | null // 新画框归入的类别
   busy: Record<string, boolean> // 按 imageId 的推理中
   uploading: boolean
 
@@ -22,6 +24,10 @@ interface DataState {
   model: ModelStatus
   tasks: TaskDef[]
   engines: EngineDef[]
+
+  // VQA / OCR 结果（瞬态，按 imageId）
+  inspections: Record<string, InspectResponse>
+  recognitions: Record<string, RecognizeResponse>
 
   loadProjects: () => Promise<void>
   loadBootstrap: () => Promise<void>
@@ -47,6 +53,10 @@ interface DataState {
 
   setModel: (m: ModelStatus) => void
   setBusy: (iid: string, v: boolean) => void
+  setSelectedIdx: (i: number | null) => void
+  setActiveClassId: (i: number | null) => void
+  setInspection: (iid: string, r: InspectResponse) => void
+  setRecognition: (iid: string, r: RecognizeResponse) => void
   refreshProjectCounts: () => Promise<void>
 }
 
@@ -58,11 +68,15 @@ export const useData = create<DataState>()((set, get) => ({
   datasets: [],
   activeImageId: null,
   anns: {},
+  selectedIdx: null,
+  activeClassId: null,
   busy: {},
   uploading: false,
   model: { state: 'unloaded' },
   tasks: [],
   engines: [],
+  inspections: {},
+  recognitions: {},
 
   loadProjects: async () => {
     const projects = await papi.listProjects()
@@ -153,7 +167,7 @@ export const useData = create<DataState>()((set, get) => ({
   },
 
   setActiveImage: async (iid) => {
-    set({ activeImageId: iid })
+    set({ activeImageId: iid, selectedIdx: null })
     if (iid && !get().anns[iid]) await get().loadAnnotations(iid)
   },
 
@@ -233,6 +247,10 @@ export const useData = create<DataState>()((set, get) => ({
 
   setModel: (m) => set({ model: m }),
   setBusy: (iid, v) => set((s) => ({ busy: { ...s.busy, [iid]: v } })),
+  setSelectedIdx: (i) => set({ selectedIdx: i }),
+  setActiveClassId: (i) => set({ activeClassId: i }),
+  setInspection: (iid, r) => set((s) => ({ inspections: { ...s.inspections, [iid]: r } })),
+  setRecognition: (iid, r) => set((s) => ({ recognitions: { ...s.recognitions, [iid]: r } })),
 
   refreshProjectCounts: async () => {
     try {

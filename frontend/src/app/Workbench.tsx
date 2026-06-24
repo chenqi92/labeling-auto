@@ -1,27 +1,365 @@
-/** 工作台容器。Phase 1 为占位骨架；Phase 2 接入五大能力的真实推理与画布。 */
+/** 工作台：左素材列表 + 中工具栏/画布 + 右结果面板。
+ *  detect/vqa/ocr 接真实后端；matting/element 在 Phase 3 接入。 */
+import { useRef, useState } from 'react'
 import { useApp } from '../appStore'
-import type { Capability } from '../types'
-import { Icon } from './ui'
+import { selActiveAnns, selActiveImage, useData } from '../dataStore'
+import { detect, inspect, recognizeText } from '../api'
+import type { Capability, ProjImage } from '../types'
+import WbCanvas from './WbCanvas'
+import { Icon, StubPage } from './ui'
 
-const CAP_META: Record<Capability, [string, string]> = {
-  detect: ['目标检测 / 智能识别', '开放词汇 · 在图中框出指定目标'],
-  vqa: ['状态巡检 / 视觉问答', '对图片提自然语言问题做结构化判断'],
-  ocr: ['文字提取 OCR', '识别图中文字的具体内容并可复制'],
-  matting: ['抠图 / 分割', '把目标从背景中抠出，输出透明背景'],
-  element: ['图片元素拆解', '把一张图自动拆成若干独立元素图层'],
+const CAP_LABEL: Record<Capability, string> = {
+  detect: '目标检测 / 智能识别', vqa: '状态巡检 / 视觉问答', ocr: '文字提取 OCR', matting: '抠图 / 分割', element: '图片元素拆解',
 }
 
 export default function Workbench() {
   const capability = useApp((s) => s.capability)
-  const [title, desc] = CAP_META[capability]
+  const image = useData(selActiveImage)
+  if (capability === 'matting' || capability === 'element') {
+    return <StubPage title={CAP_LABEL[capability]} desc={capability === 'matting' ? '把目标从背景中抠出，输出透明背景' : '把一张图自动拆成若干独立元素图层'} />
+  }
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, color: 'var(--text3)' }}>
-      <div style={{ width: 60, height: 60, borderRadius: 16, background: 'var(--panel2)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <Icon name={capability} size={28} color="var(--accent)" sw={1.6} />
+    <div style={{ height: '100%', display: 'flex', minWidth: 0 }}>
+      <ImageList />
+      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+        <Toolbar />
+        <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
+          {image ? <WbCanvas readOnly={capability !== 'detect'} /> : <EmptyCanvas />}
+        </div>
       </div>
-      <div style={{ fontSize: 18, fontWeight: 600, color: 'var(--text)' }}>{title}</div>
-      <div style={{ fontSize: 13 }}>{desc}</div>
-      <div style={{ fontSize: 12, marginTop: 4, fontFamily: 'var(--mono)' }}>// 工作台正在接入真实推理（Phase 2）</div>
+      <ResultPanel />
     </div>
   )
 }
+
+function EmptyCanvas() {
+  return (
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, color: 'var(--text3)', background: 'var(--canvas)' }}>
+      <Icon name="proj" size={36} color="var(--text3)" sw={1.4} />
+      <div style={{ fontSize: 13 }}>该项目还没有图片 · 在左侧上传后开始</div>
+    </div>
+  )
+}
+
+function ImageList() {
+  const images = useData((s) => s.images)
+  const activeImageId = useData((s) => s.activeImageId)
+  const busy = useData((s) => s.busy)
+  const uploading = useData((s) => s.uploading)
+  const setActiveImage = useData((s) => s.setActiveImage)
+  const uploadFiles = useData((s) => s.uploadFiles)
+  const [filter, setFilter] = useState<'all' | 'todo' | 'done'>('all')
+  const fileRef = useRef<HTMLInputElement>(null)
+  const shown = images.filter((i) => (filter === 'all' ? true : filter === 'done' ? i.status === 'done' : i.status !== 'done'))
+
+  return (
+    <div style={{ width: 196, flex: '0 0 196px', background: 'var(--chrome)', borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+      <div style={{ padding: '12px 12px 9px', borderBottom: '1px solid var(--border-soft)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 9 }}>
+          <span style={{ fontSize: 12, fontWeight: 600 }}>素材 · {images.length}</span>
+          <input ref={fileRef} type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={(e) => { if (e.target.files?.length) uploadFiles(e.target.files); e.target.value = '' }} />
+          <button onClick={() => fileRef.current?.click()} disabled={uploading} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--accent)', background: 'var(--accent-ghost)', border: 'none', borderRadius: 6, padding: '5px 8px', cursor: 'pointer' }}>
+            <Icon name="plus" size={12} color="currentColor" sw={2.2} />{uploading ? '上传中' : '上传'}
+          </button>
+        </div>
+        <div style={{ display: 'flex', gap: 5 }}>
+          {([['all', '全部'], ['todo', '未处理'], ['done', '已处理']] as const).map(([k, l]) => (
+            <button key={k} onClick={() => setFilter(k)} style={{ flex: 1, fontSize: 11, padding: '5px 0', borderRadius: 6, border: `1px solid ${filter === k ? 'var(--accent)' : 'var(--border)'}`, background: filter === k ? 'var(--accent-ghost)' : 'transparent', color: filter === k ? 'var(--accent)' : 'var(--text2)', cursor: 'pointer' }}>{l}</button>
+          ))}
+        </div>
+      </div>
+      <div style={{ flex: 1, overflowY: 'auto', padding: 10, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 9, alignContent: 'start' }}>
+        {shown.map((im: ProjImage) => {
+          const active = im.id === activeImageId
+          return (
+            <div key={im.id} onClick={() => setActiveImage(im.id)} style={{ position: 'relative', width: '100%', borderRadius: 8, overflow: 'hidden', cursor: 'pointer', border: `2px solid ${active ? 'var(--accent)' : 'transparent'}`, background: 'var(--panel2)' }}>
+              <img src={im.url} alt={im.filename} style={{ width: '100%', height: 54, objectFit: 'cover', display: 'block' }} />
+              <span style={{ position: 'absolute', top: 5, right: 5, width: 7, height: 7, borderRadius: '50%', background: im.status === 'done' ? 'var(--green)' : 'var(--text3)' }} />
+              {busy[im.id] && <span style={{ position: 'absolute', top: 5, left: 5, width: 12, height: 12, border: '2px solid rgba(255,255,255,.3)', borderTopColor: 'var(--accent)', borderRadius: '50%', animation: 'spin .8s linear infinite' }} />}
+              <div style={{ fontSize: 11, padding: '3px 4px', color: active ? 'var(--text)' : 'var(--text2)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{im.filename}</div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// ---------- 工具栏（按能力切换） ----------
+function Toolbar() {
+  const capability = useApp((s) => s.capability)
+  const label = CAP_LABEL[capability]
+  return (
+    <div style={{ flex: '0 0 auto', borderBottom: '1px solid var(--border)', background: 'var(--chrome)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--accent-ghost)', border: '1px solid rgba(25,200,184,.25)', borderRadius: 8, padding: '7px 11px', whiteSpace: 'nowrap' }}>
+          <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--accent)' }} />
+          <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--accent)' }}>{label}</span>
+        </div>
+        {capability === 'detect' && <DetectControls />}
+        {capability === 'vqa' && <VqaControls />}
+        {capability === 'ocr' && <OcrControls />}
+      </div>
+    </div>
+  )
+}
+
+const runBtnStyle = (disabled: boolean) => ({
+  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+  background: disabled ? 'var(--panel2)' : 'var(--accent)', color: disabled ? 'var(--text3)' : '#04140f',
+  border: disabled ? '1px solid var(--border)' : 'none', borderRadius: 8, padding: '9px 16px',
+  fontSize: 13.5, fontWeight: 600, cursor: disabled ? 'not-allowed' : 'pointer',
+}) as const
+
+function DetectControls() {
+  const engines = useData((s) => s.engines)
+  const images = useData((s) => s.images)
+  const activeImageId = useData((s) => s.activeImageId)
+  const setBusy = useData((s) => s.setBusy)
+  const applyDetections = useData((s) => s.applyDetections)
+  const { tags, setTags, engine, setEngine, thresh, setThresh, mode, setMode } = useDetectCfg()
+  const [input, setInput] = useState('')
+  const [running, setRunning] = useState(false)
+  const isYoloe = engine.startsWith('yoloe')
+
+  const addTag = (v: string) => { const t = v.trim(); if (t && !tags.includes(t)) setTags([...tags, t]) }
+  const run = async (all: boolean) => {
+    const q = tags.join(' ').trim()
+    if (!q) { alert('请先输入检测目标（类别）'); return }
+    const ids = all ? images.map((i) => i.id) : activeImageId ? [activeImageId] : []
+    if (!ids.length) { alert('请先选择图片'); return }
+    setRunning(true)
+    try {
+      for (const id of ids) {
+        setBusy(id, true)
+        try {
+          const res = await detect({ image_id: id, query: q, task: 'detection', engine, mode })
+          await applyDetections(id, res.boxes)
+        } finally { setBusy(id, false) }
+      }
+    } catch (e) { alert(`检测失败：${(e as Error).message}`) } finally { setRunning(false) }
+  }
+
+  return (
+    <>
+      {engines.length > 0 && (
+        <select value={engine} onChange={(e) => setEngine(e.target.value)} style={selStyle} title="检测引擎">
+          {engines.map((en) => <option key={en.key} value={en.key}>{en.label}</option>)}
+        </select>
+      )}
+      <div style={{ flex: 1, display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6, background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 8, padding: '5px 9px', minWidth: 220 }}>
+        {tags.map((t) => (
+          <span key={t} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, background: 'var(--accent-ghost)', color: 'var(--accent)', borderRadius: 6, padding: '3px 6px 3px 8px' }}>
+            {t}<button onClick={() => setTags(tags.filter((x) => x !== t))} style={{ display: 'flex', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', padding: 0 }}><Icon name="close" size={11} color="currentColor" sw={2.4} /></button>
+          </span>
+        ))}
+        <input value={input} onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); addTag(input); setInput('') } else if (e.key === 'Backspace' && !input && tags.length) setTags(tags.slice(0, -1)) }}
+          placeholder={isYoloe ? '英文常见类名，回车添加：ship buoy person' : '中/英描述目标，回车添加：航标 损坏的浮筒'}
+          style={{ flex: 1, minWidth: 130, background: 'transparent', border: 'none', outline: 'none', color: 'var(--text)', fontSize: 12.5 }} />
+      </div>
+      {!isYoloe && (
+        <div style={{ display: 'flex', gap: 4, background: 'var(--panel2)', borderRadius: 7, padding: 3 }}>
+          {(['slow', 'hybrid', 'fast'] as const).map((m, i) => (
+            <button key={m} onClick={() => setMode(m)} style={segStyle(mode === m)}>{['稳', '衡', '快'][i]}</button>
+          ))}
+        </div>
+      )}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 7 }} title="置信度阈值（前端过滤显示）">
+        <span style={{ fontSize: 11.5, color: 'var(--text3)' }}>阈值</span>
+        <input type="range" min={0} max={1} step={0.05} value={thresh} onChange={(e) => setThresh(parseFloat(e.target.value))} style={{ width: 80, accentColor: 'var(--accent)' }} />
+        <span style={{ fontSize: 12, fontFamily: 'var(--mono)', color: 'var(--text2)', width: 32 }}>{Math.round(thresh * 100)}%</span>
+      </div>
+      <button onClick={() => run(false)} disabled={running} style={runBtnStyle(running)}>
+        {running ? <span style={{ width: 13, height: 13, border: '2px solid rgba(255,255,255,.3)', borderTopColor: 'currentColor', borderRadius: '50%', animation: 'spin .8s linear infinite' }} /> : <Icon name="play" size={14} color="currentColor" />}
+        {running ? '推理中…' : '检测当前'}
+      </button>
+      <button onClick={() => run(true)} disabled={running} style={{ display: 'flex', alignItems: 'center', gap: 7, background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 8, padding: '9px 14px', fontSize: 13, fontWeight: 600, color: 'var(--text)', cursor: 'pointer' }}>
+        <Icon name="batch" size={14} color="currentColor" sw={2} />全部
+      </button>
+    </>
+  )
+}
+
+// 检测配置：用 module 级简单状态（每能力独立，跨切换保留）
+const detectCfgState = { tags: ['航标'] as string[], engine: 'la', thresh: 0.3, mode: 'slow' as 'slow' | 'hybrid' | 'fast' }
+function useDetectCfg() {
+  const [, force] = useState(0)
+  const rerender = () => force((n) => n + 1)
+  return {
+    tags: detectCfgState.tags, setTags: (v: string[]) => { detectCfgState.tags = v; rerender() },
+    engine: detectCfgState.engine, setEngine: (v: string) => { detectCfgState.engine = v; rerender() },
+    thresh: detectCfgState.thresh, setThresh: (v: number) => { detectCfgState.thresh = v; rerender() },
+    mode: detectCfgState.mode, setMode: (v: 'slow' | 'hybrid' | 'fast') => { detectCfgState.mode = v; rerender() },
+  }
+}
+
+const vqaState = { q: '航标是否损坏？\n航标灯是否正常竖立？' }
+function VqaControls() {
+  const activeImageId = useData((s) => s.activeImageId)
+  const setBusy = useData((s) => s.setBusy)
+  const setInspection = useData((s) => s.setInspection)
+  const [running, setRunning] = useState(false)
+  const run = async () => {
+    if (!activeImageId) { alert('请先选择图片'); return }
+    if (!vqaState.q.trim()) { alert('请先输入要判断的问题'); return }
+    setRunning(true); setBusy(activeImageId, true)
+    try {
+      const res = await inspect({ image_id: activeImageId, query: vqaState.q })
+      setInspection(activeImageId, res)
+    } catch (e) { alert(`巡检失败：${(e as Error).message}`) } finally { setRunning(false); setBusy(activeImageId, false) }
+  }
+  return (
+    <>
+      <span style={{ fontSize: 11, color: 'var(--amber)', display: 'flex', alignItems: 'center', gap: 5 }}><Icon name="warn" size={12} color="currentColor" sw={1.8} />VLM · 占显存较高 · 空闲自动释放</span>
+      <div style={{ flex: 1 }} />
+      <button onClick={run} disabled={running} style={runBtnStyle(running)}>
+        {running ? <span style={{ width: 13, height: 13, border: '2px solid rgba(255,255,255,.3)', borderTopColor: 'currentColor', borderRadius: '50%', animation: 'spin .8s linear infinite' }} /> : <Icon name="play" size={14} color="currentColor" />}
+        {running ? '巡检中…' : '巡检当前'}
+      </button>
+    </>
+  )
+}
+
+function OcrControls() {
+  const activeImageId = useData((s) => s.activeImageId)
+  const setBusy = useData((s) => s.setBusy)
+  const setRecognition = useData((s) => s.setRecognition)
+  const [running, setRunning] = useState(false)
+  const run = async () => {
+    if (!activeImageId) { alert('请先选择图片'); return }
+    setRunning(true); setBusy(activeImageId, true)
+    try {
+      const res = await recognizeText({ image_id: activeImageId })
+      setRecognition(activeImageId, res)
+    } catch (e) { alert(`识别失败：${(e as Error).message}`) } finally { setRunning(false); setBusy(activeImageId, false) }
+  }
+  return (
+    <>
+      <span style={{ fontSize: 11, color: 'var(--text3)' }}>VLM-OCR · 输出可复制文本</span>
+      <div style={{ flex: 1 }} />
+      <button onClick={run} disabled={running} style={runBtnStyle(running)}>
+        {running ? <span style={{ width: 13, height: 13, border: '2px solid rgba(255,255,255,.3)', borderTopColor: 'currentColor', borderRadius: '50%', animation: 'spin .8s linear infinite' }} /> : <Icon name="play" size={14} color="currentColor" />}
+        {running ? '识别中…' : '识别当前'}
+      </button>
+    </>
+  )
+}
+
+// ---------- 右侧结果面板 ----------
+function ResultPanel() {
+  const capability = useApp((s) => s.capability)
+  return (
+    <div style={{ width: 320, flex: '0 0 320px', background: 'var(--chrome)', borderLeft: '1px solid var(--border)', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+      {capability === 'detect' && <DetectResults />}
+      {capability === 'vqa' && <VqaResults />}
+      {capability === 'ocr' && <OcrResults />}
+    </div>
+  )
+}
+
+function DetectResults() {
+  const anns = useData(selActiveAnns)
+  const classes = useData((s) => s.classes)
+  const selectedIdx = useData((s) => s.selectedIdx)
+  const setSelectedIdx = useData((s) => s.setSelectedIdx)
+  const activeImageId = useData((s) => s.activeImageId)
+  const saveAnnotations = useData((s) => s.saveAnnotations)
+  const goView = useApp((s) => s.goView)
+  const nameOf = (ci: number) => classes.find((c) => c.id === ci)?.name ?? `#${ci}`
+  const colorOf = (ci: number) => classes.find((c) => c.id === ci)?.color ?? '#3d8bff'
+  const del = (i: number) => { if (activeImageId) saveAnnotations(activeImageId, anns.filter((_, k) => k !== i)) }
+
+  return (
+    <>
+      <div style={{ padding: '13px 15px', borderBottom: '1px solid var(--border-soft)' }}>
+        <div style={{ fontSize: 13, fontWeight: 600 }}>检测结果</div>
+        <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>{anns.length} 个标注 · 点选高亮 / 可删</div>
+      </div>
+      <div style={{ flex: 1, overflowY: 'auto', padding: 9 }}>
+        {anns.length === 0 && <div style={{ padding: 16, fontSize: 12.5, color: 'var(--text3)' }}>还没有标注。输入类别后点「检测当前」，或在画布空白处拖拽手动画框。</div>}
+        {anns.map((a, i) => (
+          <div key={i} onClick={() => setSelectedIdx(i)} style={{ border: `1px solid ${i === selectedIdx ? 'var(--accent)' : 'var(--border-soft)'}`, borderRadius: 9, padding: '10px 11px', marginBottom: 8, background: 'var(--panel2)', cursor: 'pointer' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 7 }}>
+              <span style={{ width: 9, height: 9, borderRadius: 2, background: colorOf(a.class_idx), flex: '0 0 9px' }} />
+              <span style={{ fontSize: 13, fontWeight: 600, flex: 1 }}>{nameOf(a.class_idx)}</span>
+              {a.score != null && <span style={{ fontSize: 12, fontFamily: 'var(--mono)', color: 'var(--text2)' }}>{(a.score * 100).toFixed(0)}%</span>}
+              <span style={{ fontSize: 10, color: a.source === 'auto' ? 'var(--blue)' : 'var(--text3)' }}>{a.source === 'auto' ? '自动' : '手动'}</span>
+              <button onClick={(e) => { e.stopPropagation(); del(i) }} style={{ display: 'flex', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text3)', padding: 0 }}><Icon name="trash" size={14} color="currentColor" /></button>
+            </div>
+            <div style={{ fontSize: 10.5, fontFamily: 'var(--mono)', color: 'var(--text3)' }}>{`[${a.x1.toFixed(0)}, ${a.y1.toFixed(0)}, ${a.x2.toFixed(0)}, ${a.y2.toFixed(0)}]`}</div>
+          </div>
+        ))}
+      </div>
+      <div style={{ borderTop: '1px solid var(--border-soft)', padding: '11px 13px' }}>
+        <button onClick={() => goView('annotation')} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, background: 'var(--accent-ghost)', color: 'var(--accent)', border: '1px solid rgba(25,200,184,.3)', borderRadius: 8, padding: 9, fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>
+          <Icon name="anno" size={14} color="currentColor" />转入标注修正
+        </button>
+      </div>
+    </>
+  )
+}
+
+function VqaResults() {
+  const activeImageId = useData((s) => s.activeImageId)
+  const busy = useData((s) => s.busy)
+  const inspections = useData((s) => s.inspections)
+  const res = activeImageId ? inspections[activeImageId] : undefined
+  const vmap: Record<string, [string, string, string]> = { 是: ['是', 'var(--green)', 'var(--green-g)'], 否: ['否', 'var(--red)', 'var(--red-g)'], 不确定: ['不确定', 'var(--amber)', 'var(--amber-g)'] }
+  return (
+    <>
+      <div style={{ padding: '13px 15px', borderBottom: '1px solid var(--border-soft)' }}>
+        <div style={{ fontSize: 13, fontWeight: 600 }}>巡检结论</div>
+        <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>逐条判断 · 含依据{res ? ` · ${res.elapsed_ms}ms` : ''}</div>
+      </div>
+      <div style={{ padding: '11px 13px', borderBottom: '1px solid var(--border-soft)' }}>
+        <textarea defaultValue={vqaState.q} onChange={(e) => { vqaState.q = e.target.value }} rows={3} placeholder="每行一个问题，如：航标是否损坏？"
+          style={{ width: '100%', background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 8, padding: 9, color: 'var(--text)', fontSize: 12.5, outline: 'none', resize: 'vertical' }} />
+      </div>
+      <div style={{ flex: 1, overflowY: 'auto', padding: 11 }}>
+        {activeImageId && busy[activeImageId] && <div style={{ fontSize: 12.5, color: 'var(--text3)', padding: 8 }}>模型推理中…</div>}
+        {!res && <div style={{ fontSize: 12.5, color: 'var(--text3)', padding: 8 }}>编辑问题后点「巡检当前」。</div>}
+        {res?.answers.map((q, i) => {
+          const [t, c, g] = vmap[q.answer] ?? vmap['不确定']
+          return (
+            <div key={i} style={{ background: 'var(--panel2)', borderRadius: 10, padding: 12, marginBottom: 9 }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, marginBottom: 8 }}>
+                <span style={{ fontSize: 13, fontWeight: 600, lineHeight: 1.4 }}>{q.question}</span>
+                <span style={{ fontSize: 12, fontWeight: 600, color: c, background: g, border: `1px solid ${c}55`, borderRadius: 7, padding: '4px 11px', whiteSpace: 'nowrap' }}>{t}</span>
+              </div>
+              {q.detail && <div style={{ fontSize: 11.5, lineHeight: 1.55, color: 'var(--text2)' }}>{q.detail}</div>}
+            </div>
+          )
+        })}
+      </div>
+    </>
+  )
+}
+
+function OcrResults() {
+  const activeImageId = useData((s) => s.activeImageId)
+  const busy = useData((s) => s.busy)
+  const recognitions = useData((s) => s.recognitions)
+  const [copied, setCopied] = useState(false)
+  const res = activeImageId ? recognitions[activeImageId] : undefined
+  const copy = () => { if (res?.text) { navigator.clipboard.writeText(res.text); setCopied(true); setTimeout(() => setCopied(false), 1500) } }
+  return (
+    <>
+      <div style={{ padding: '13px 15px', borderBottom: '1px solid var(--border-soft)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 600 }}>识别文本</div>
+          <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>可复制{res ? ` · ${res.elapsed_ms}ms` : ''}</div>
+        </div>
+        {res?.text && <button onClick={copy} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: 'var(--accent)', background: 'var(--accent-ghost)', border: '1px solid rgba(25,200,184,.3)', borderRadius: 7, padding: '6px 10px', cursor: 'pointer' }}><Icon name="copy" size={13} color="currentColor" />{copied ? '已复制' : '复制全部'}</button>}
+      </div>
+      <div style={{ flex: 1, overflowY: 'auto', padding: 13 }}>
+        {activeImageId && busy[activeImageId] && <div style={{ fontSize: 12.5, color: 'var(--text3)' }}>识别中…</div>}
+        {!res && <div style={{ fontSize: 12.5, color: 'var(--text3)' }}>点「识别当前」用视觉模型读出图中文字。</div>}
+        {res && (res.text ? <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 12.5, lineHeight: 1.6, fontFamily: 'var(--mono)', color: 'var(--text)' }}>{res.text}</pre> : <div style={{ fontSize: 12.5, color: 'var(--text3)' }}>未识别到文字。</div>)}
+      </div>
+    </>
+  )
+}
+
+const selStyle = { background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 10px', color: 'var(--text)', fontSize: 12.5, outline: 'none', cursor: 'pointer' } as const
+const segStyle = (active: boolean) => ({ fontSize: 11.5, padding: '6px 12px', borderRadius: 6, cursor: 'pointer', border: 'none', background: active ? 'var(--accent-ghost)' : 'transparent', color: active ? 'var(--accent)' : 'var(--text2)', fontWeight: active ? 600 : 500 }) as const
