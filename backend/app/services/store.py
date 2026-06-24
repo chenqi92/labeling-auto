@@ -99,6 +99,18 @@ class ImageStore:
             self._save_index()
         return item
 
+    def remove(self, img_id: str) -> bool:
+        with self._lock:
+            item = self._items.pop(img_id, None)
+            if item is None:
+                return False
+            try:
+                os.remove(item.path)
+            except OSError:
+                pass
+            self._save_index()
+            return True
+
     def get(self, img_id: str) -> StoredImage | None:
         return self._items.get(img_id)
 

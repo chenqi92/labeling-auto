@@ -54,6 +54,9 @@ def _startup() -> None:
 
 # 账户 / 会话 / 用户管理
 app.include_router(auth.router)
+# 项目 / 图片 / 类别 / 标注 / 数据集版本
+from app import projects  # noqa: E402
+app.include_router(projects.router)
 
 # 支持的任务（给前端下拉用）
 TASKS = [

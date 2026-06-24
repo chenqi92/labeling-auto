@@ -83,6 +83,64 @@ SCHEMA: list[str] = [
         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     )
     """,
+    # —— 项目 / 数据集 / 标注 ——
+    """
+    CREATE TABLE IF NOT EXISTS projects (
+        id          TEXT PRIMARY KEY,
+        name        TEXT NOT NULL,
+        created_at  REAL NOT NULL,
+        updated_at  REAL NOT NULL
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS images (
+        id          TEXT PRIMARY KEY,
+        project_id  TEXT NOT NULL,
+        filename    TEXT NOT NULL,
+        width       INTEGER NOT NULL,
+        height      INTEGER NOT NULL,
+        status      TEXT NOT NULL DEFAULT 'todo',   -- todo | done | reviewed
+        created_at  REAL NOT NULL,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_images_project ON images(project_id)",
+    """
+    CREATE TABLE IF NOT EXISTS classes (
+        project_id  TEXT NOT NULL,
+        idx         INTEGER NOT NULL,               -- 项目内类别序号（= YOLO class_id）
+        name        TEXT NOT NULL,
+        color       TEXT NOT NULL,
+        PRIMARY KEY (project_id, idx),
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS annotations (
+        id          TEXT PRIMARY KEY,
+        image_id    TEXT NOT NULL,
+        class_idx   INTEGER NOT NULL,
+        x1 REAL, y1 REAL, x2 REAL, y2 REAL,         -- 原图像素坐标
+        score       REAL,
+        source      TEXT NOT NULL DEFAULT 'manual', -- auto | manual
+        created_at  REAL NOT NULL,
+        FOREIGN KEY (image_id) REFERENCES images(id) ON DELETE CASCADE
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_anns_image ON annotations(image_id)",
+    """
+    CREATE TABLE IF NOT EXISTS dataset_versions (
+        id            TEXT PRIMARY KEY,
+        project_id    TEXT NOT NULL,
+        name          TEXT NOT NULL,
+        sample_count  INTEGER NOT NULL,
+        class_count   INTEGER NOT NULL,
+        box_count     INTEGER NOT NULL DEFAULT 0,
+        split         TEXT NOT NULL DEFAULT '80/20',
+        created_at    REAL NOT NULL,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    )
+    """,
 ]
 
 
@@ -97,5 +155,6 @@ def init_db() -> None:
                 conn.execute(ddl)
         _initialized = True
     # 播种放在建表之后，避免循环 import 放这里调用
-    from app import auth
+    from app import auth, projects
     auth.seed_admin()
+    projects.seed_default()
