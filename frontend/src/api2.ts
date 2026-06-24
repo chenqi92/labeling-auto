@@ -12,7 +12,7 @@ export const matte = (body: { image_id: string; mode: string; classes?: string[]
   apiJson<MatteResult>('/api/matte', { method: 'POST', body: JSON.stringify(body) })
 export const elements = (body: { image_id: string; classes?: string[]; granularity?: string; conf?: number }) =>
   apiJson<{ image_id: string; elements: ElementItem[] }>('/api/elements', { method: 'POST', body: JSON.stringify(body) })
-export const exportElements = (body: { image_id: string; classes?: string[]; selected?: number[]; keep_position?: boolean }) =>
+export const exportElements = (body: { image_id: string; classes?: string[]; granularity?: string; selected?: number[]; keep_position?: boolean }) =>
   apiRaw('/api/elements/export', { method: 'POST', body: JSON.stringify(body) }).then((r) => r.blob())
 
 // ---------- 模型管理 / GPU ----------

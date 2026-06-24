@@ -8,7 +8,7 @@ import { downloadBlob, elements as apiElements, exportElements, matte } from '..
 import type { Capability, ProjImage } from '../types'
 import WbCanvas from './WbCanvas'
 import { Icon } from './ui'
-import { toast } from './overlays'
+import { confirmDialog, toast } from './overlays'
 
 const CAP_LABEL: Record<Capability, string> = {
   detect: '目标检测 / 智能识别', vqa: '状态巡检 / 视觉问答', ocr: '文字提取 OCR', matting: '抠图 / 分割', element: '图片元素拆解',
@@ -50,6 +50,7 @@ function ImageList() {
   const uploading = useData((s) => s.uploading)
   const setActiveImage = useData((s) => s.setActiveImage)
   const uploadFiles = useData((s) => s.uploadFiles)
+  const removeImage = useData((s) => s.removeImage)
   const imgQuery = useData((s) => s.imgQuery)
   const [filter, setFilter] = useState<'all' | 'todo' | 'done'>('all')
   const q = imgQuery.trim().toLowerCase()
@@ -78,7 +79,9 @@ function ImageList() {
             <div key={im.id} onClick={() => setActiveImage(im.id)} style={{ position: 'relative', width: '100%', borderRadius: 8, overflow: 'hidden', cursor: 'pointer', border: `2px solid ${active ? 'var(--accent)' : 'transparent'}`, background: 'var(--panel2)' }}>
               <img src={im.url} alt={im.filename} style={{ width: '100%', height: 54, objectFit: 'cover', display: 'block' }} />
               <span style={{ position: 'absolute', top: 5, right: 5, width: 7, height: 7, borderRadius: '50%', background: im.status === 'done' ? 'var(--green)' : 'var(--text3)' }} />
-              {busy[im.id] && <span style={{ position: 'absolute', top: 5, left: 5, width: 12, height: 12, border: '2px solid rgba(255,255,255,.3)', borderTopColor: 'var(--accent)', borderRadius: '50%', animation: 'spin .8s linear infinite' }} />}
+              {busy[im.id]
+                ? <span style={{ position: 'absolute', top: 5, left: 5, width: 12, height: 12, border: '2px solid rgba(255,255,255,.3)', borderTopColor: 'var(--accent)', borderRadius: '50%', animation: 'spin .8s linear infinite' }} />
+                : <button onClick={async (e) => { e.stopPropagation(); if (await confirmDialog(`移除素材「${im.filename}」？`)) removeImage(im.id) }} title="移除素材" style={{ position: 'absolute', top: 4, left: 4, width: 18, height: 18, borderRadius: 5, background: 'rgba(0,0,0,.55)', border: 'none', cursor: 'pointer', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}><Icon name="trash" size={11} color="#fff" /></button>}
               <div style={{ fontSize: 11, padding: '3px 4px', color: active ? 'var(--text)' : 'var(--text2)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{im.filename}</div>
             </div>
           )
@@ -525,7 +528,7 @@ function ElementResults() {
     if (!activeImageId) return
     try {
       const selected = els.filter((e) => sel[e.idx]).map((e) => e.idx)
-      downloadBlob(await exportElements({ image_id: activeImageId, classes: elClassesByImage[activeImageId] ?? [], selected }), 'elements.zip')
+      downloadBlob(await exportElements({ image_id: activeImageId, classes: elClassesByImage[activeImageId] ?? [], granularity: elState.granularity, selected }), 'elements.zip')
     } catch (e) { toast((e as Error).message) }
   }
   return (

@@ -66,7 +66,7 @@ export default function Login() {
             ))}
           </div>
         </div>
-        <div style={{ fontSize: 11, color: 'var(--text3)' }}>© 2026 VisLab · 内网视觉智能平台 · v2.4.3</div>
+        <div style={{ fontSize: 11, color: 'var(--text3)' }}>© 2026 VisLab · 内网视觉智能平台 · v2.4.4</div>
         <div style={{ position: 'absolute', right: -80, top: '50%', transform: 'translateY(-50%)', width: 360, height: 360, border: '1px solid rgba(25,200,184,.16)', borderRadius: '50%' }} />
         <div style={{ position: 'absolute', right: -30, top: '50%', transform: 'translateY(-50%)', width: 240, height: 240, border: '1px solid rgba(25,200,184,.1)', borderRadius: '50%' }} />
       </div>

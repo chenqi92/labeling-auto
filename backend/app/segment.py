@@ -69,6 +69,55 @@ def _sam_mask(pil, box=None, points=None, labels=None, name: str = DEFAULT_SAM):
     return mask
 
 
+def _sam_everything(pil, min_area: float = 0.003, max_area: float = 0.92, cap: int = 40, name: str = DEFAULT_SAM):
+    """SAM「分割一切」自动分割（无 prompt）-> 元素列表，按面积过滤+封顶+降序。
+
+    用于「细·实例」拆解：找出图中所有显著元素（两条船、轮子等），不依赖类别词表。
+    """
+    import numpy as np
+    from PIL import Image
+    m = _ensure_sam(name)
+    res = m.predict(pil, verbose=False)[0]
+    if res.masks is None or len(res.masks.data) == 0:
+        return []
+    data = res.masks.data
+    data = data.cpu().numpy() if hasattr(data, "cpu") else np.asarray(data)
+    H, W = pil.height, pil.width
+    total = float(H * W)
+    items = []
+    for k in range(data.shape[0]):
+        mk = data[k] > 0.5
+        if mk.shape != (H, W):
+            mk = np.asarray(Image.fromarray((mk * 255).astype("uint8")).resize((W, H))) > 127
+        a = int(mk.sum())
+        if a < min_area * total or a > max_area * total:
+            continue
+        ys, xs = np.where(mk)
+        if not len(xs):
+            continue
+        items.append({"label": "元素", "mask": mk, "bbox": [float(xs.min()), float(ys.min()), float(xs.max()), float(ys.max())], "_a": a})
+    items.sort(key=lambda d: d["_a"], reverse=True)
+    for d in items[:cap]:
+        d.pop("_a", None)
+    return items[:cap]
+
+
+def _extract_elements(pil, classes: list[str], granularity: str, conf: float, variant: str):
+    """统一的元素拆解：返回 [{label, mask, bbox}]。/elements 与 /elements/export 共用，保证一致。
+
+    - 指定 classes：YOLOE-seg 按类（带类别名）。
+    - 留空 + instance(细·实例)：SAM 自动分割一切，找出全部元素。
+    - 留空 + coarse(粗·大块)：YOLOE-seg 通用词表（语义大块，带类别名）。
+    """
+    if classes:
+        insts = _instances(pil, classes, conf, variant)
+    elif granularity == "instance":
+        return _sam_everything(pil)
+    else:
+        insts = _instances(pil, [], conf, variant)
+    return [{"label": it["label"], "mask": it["mask"], "bbox": it["bbox"]} for it in insts]
+
+
 def _ensure_seg(variant: str):
     """懒加载并缓存一个 YOLOE-seg 模型。"""
     import os
@@ -255,6 +304,7 @@ class ElementsResponse(BaseModel):
 class ElementsExport(BaseModel):
     image_id: str
     classes: list[str] = []
+    granularity: str = "instance"
     selected: list[int] = []
     keep_position: bool = True
     conf: float = 0.25
@@ -337,7 +387,7 @@ def api_matte(req: MatteRequest, _: UserOut = Depends(current_user)) -> MatteRes
 def api_elements(req: ElementsRequest, _: UserOut = Depends(current_user)) -> ElementsResponse:
     pil = _pil(req.image_id)
     try:
-        insts = _instances(pil, req.classes, req.conf, req.variant)
+        insts = _extract_elements(pil, req.classes, req.granularity, req.conf, req.variant)
     except Exception as e:  # noqa: BLE001
         raise HTTPException(500, detail=f"元素拆解失败：{e}")
     els: list[ElementItem] = []
@@ -353,7 +403,7 @@ def api_elements(req: ElementsRequest, _: UserOut = Depends(current_user)) -> El
 def api_elements_export(req: ElementsExport, _: UserOut = Depends(current_user)):
     from fastapi.responses import Response
     pil = _pil(req.image_id)
-    insts = _instances(pil, req.classes, req.conf, req.variant)
+    insts = _extract_elements(pil, req.classes, req.granularity, req.conf, req.variant)
     pick = set(req.selected) if req.selected else set(range(len(insts)))
     buf = io.BytesIO()
     layers = []
