@@ -1,0 +1,55 @@
+/* 视觉智能工作台设计系统 —— 自 design/视觉智能工作台.dc.html 移植。
+   深色优先；[data-theme="light"] 覆盖为浅色。组件统一用这些 CSS 变量。 */
+:root {
+  --bg: #080b11; --chrome: #0b0e15; --panel: #121823; --panel2: #19202b; --raised: #1f2733;
+  --display: 'Space Grotesk', 'IBM Plex Sans', 'PingFang SC', sans-serif;
+  --grid: rgba(120, 200, 210, .05); --gridfine: rgba(120, 200, 210, .045);
+  --glow: 0 0 0 1px rgba(25, 200, 184, .35), 0 0 22px rgba(25, 200, 184, .18);
+  --dotgrid: radial-gradient(circle, rgba(150, 200, 210, .05) 1px, transparent 1.4px);
+  --border: #252e3a; --border-soft: rgba(255, 255, 255, .07);
+  --text: #e6eaf1; --text2: #9aa6b6; --text3: #69737f;
+  --accent: #19c8b8; --accent-dim: #0f8a80; --accent-ghost: rgba(25, 200, 184, .13);
+  --canvas: #06080c;
+  --green: #2bd576; --blue: #3d8bff; --amber: #f6b73c; --red: #ff5a5f;
+  --mono: 'IBM Plex Mono', 'SF Mono', ui-monospace, monospace;
+  --font: 'IBM Plex Sans', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+  --green-g: rgba(43, 213, 118, .14); --blue-g: rgba(61, 139, 255, .14);
+  --amber-g: rgba(246, 183, 60, .14); --red-g: rgba(255, 90, 95, .14);
+  --shadow: 0 8px 30px rgba(0, 0, 0, .45);
+}
+[data-theme="light"] {
+  --bg: #eef1f6; --chrome: #ffffff; --panel: #ffffff; --panel2: #f5f7fa; --raised: #ffffff;
+  --grid: rgba(20, 90, 100, .07); --gridfine: rgba(20, 90, 100, .05);
+  --dotgrid: radial-gradient(circle, rgba(30, 80, 90, .09) 1px, transparent 1.4px);
+  --border: #e3e8ef; --border-soft: rgba(15, 23, 42, .07);
+  --text: #1a2230; --text2: #566377; --text3: #8a96a6;
+  --accent-ghost: rgba(15, 138, 128, .1);
+  --shadow: 0 8px 30px rgba(15, 23, 42, .12);
+}
+
+* { box-sizing: border-box; }
+html, body, #root { margin: 0; padding: 0; height: 100%; }
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+}
+input, button, textarea, select { font-family: inherit; }
+
+::-webkit-scrollbar { width: 9px; height: 9px; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 6px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text3); }
+::-webkit-scrollbar-track { background: transparent; }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
+@keyframes blink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: .25; } }
+@keyframes scan { 0% { top: 0; } 100% { top: 100%; } }
+@keyframes shimmer { 0% { background-position: -400px 0; } 100% { background-position: 400px 0; } }
+@keyframes fadeup { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes popin { from { opacity: 0; transform: scale(.96); } to { opacity: 1; transform: none; } }
+@keyframes hbar { 0%, 100% { transform: scaleY(.35); } 50% { transform: scaleY(1); } }
+@keyframes sweep { 0% { transform: translateX(-100%); } 100% { transform: translateX(400%); } }
+@keyframes drift { 0% { background-position: 0 0; } 100% { background-position: 0 -640px; } }
+@keyframes barsweep { 0% { left: -14%; } 100% { left: 104%; } }

@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 
+from app import auth, db
 from app.config import settings
 from app.engine.base import DetectParams
 from app.engine.manager import manager
@@ -44,6 +45,15 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.on_event("startup")
+def _startup() -> None:
+    db.init_db()  # 建表 + 播种管理员（幂等）
+
+
+# 账户 / 会话 / 用户管理
+app.include_router(auth.router)
 
 # 支持的任务（给前端下拉用）
 TASKS = [

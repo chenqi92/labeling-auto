@@ -1,5 +1,38 @@
 export type TaskKey = 'detection' | 'grounding' | 'ocr' | 'gui' | 'point' | 'inspect' | 'recognize'
 
+// —— 账户 / 应用外壳 ——
+export type Role = 'admin' | 'user' | 'guest'
+export type Theme = 'dark' | 'light'
+
+/** 工作台五大能力。 */
+export type Capability = 'detect' | 'vqa' | 'ocr' | 'matting' | 'element'
+
+/** 非工作台的独立页面。 */
+export type PageKey =
+  | 'projects'
+  | 'annotation'
+  | 'training'
+  | 'trainWizard'
+  | 'trainMonitor'
+  | 'registry'
+  | 'jobs'
+  | 'batch'
+  | 'admin'
+  | 'monitor'
+  | 'settings'
+
+export type ViewKey = 'workbench' | PageKey
+
+export interface User {
+  id: number
+  username: string
+  name: string
+  role: Role
+  role_label: string
+  last_active: number
+  online: boolean
+}
+
 export interface ImageItem {
   id: string
   filename: string

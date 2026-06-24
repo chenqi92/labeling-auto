@@ -49,6 +49,14 @@ class Settings(BaseSettings):
     # —— 开发用假引擎（无需 GPU）——
     mock: bool = False
 
+    # —— 账户 / 持久化（SQLite，纯标准库）——
+    # DB 路径默认放在 data_dir 下；首次启动自动建表并播种管理员账号。
+    db_path: str = ""                       # 空 = {data_dir}/app.db
+    auth_token_ttl_days: int = 14           # 会话令牌有效期
+    default_admin_user: str = "admin"       # 首次启动播种的管理员账号
+    default_admin_password: str = "admin123"  # 首次登录后请在「用户管理」改密
+    default_admin_name: str = "管理员"
+
     # —— 服务 ——
     data_dir: str = "./.data"
     cors_origins: list[str] = Field(
