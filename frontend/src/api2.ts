@@ -8,7 +8,7 @@ export interface ElementItem { idx: number; name: string; cls: string; area_pct:
 
 export const segment = (body: { image_id: string; classes?: string[]; conf?: number; variant?: string }) =>
   apiJson<{ image_id: string; instances: SegInstance[] }>('/api/segment', { method: 'POST', body: JSON.stringify(body) })
-export const matte = (body: { image_id: string; mode: string; classes?: string[]; box?: number[]; feather?: number }) =>
+export const matte = (body: { image_id: string; mode: string; classes?: string[]; box?: number[]; points?: number[][]; point_labels?: number[]; feather?: number }) =>
   apiJson<MatteResult>('/api/matte', { method: 'POST', body: JSON.stringify(body) })
 export const elements = (body: { image_id: string; classes?: string[]; granularity?: string; conf?: number }) =>
   apiJson<{ image_id: string; elements: ElementItem[] }>('/api/elements', { method: 'POST', body: JSON.stringify(body) })

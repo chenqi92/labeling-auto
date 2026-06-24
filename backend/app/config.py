@@ -45,6 +45,8 @@ class Settings(BaseSettings):
     yoloe_weights_dir: str = "/data/ultralytics/weights"
     yoloe_config_dir: str = "/data/ultralytics"
     yoloe_conf: float = 0.25          # 检测置信度阈值
+    # 一键去背用的 rembg session（BiRefNet 边缘优于 u2net）；可设 birefnet-general-lite / u2net
+    rembg_session: str = "birefnet-general"
 
     # —— 开发用假引擎（无需 GPU）——
     mock: bool = False

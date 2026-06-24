@@ -1,6 +1,6 @@
 /** 工作台：左素材列表 + 中工具栏/画布 + 右结果面板。
  *  detect/vqa/ocr 接真实后端；matting/element 在 Phase 3 接入。 */
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useApp } from '../appStore'
 import { selActiveAnns, selActiveImage, useData } from '../dataStore'
 import { detect, inspect, recognizeText } from '../api'
@@ -273,28 +273,44 @@ function MattingControls() {
   const setMatte = useData((s) => s.setMatte)
   const matMode = useData((s) => s.matMode)
   const matBox = useData((s) => s.matBox)
+  const matPoints = useData((s) => s.matPoints)
   const setMatMode = useData((s) => s.setMatMode)
+  const clearMatPoints = useData((s) => s.clearMatPoints)
   const [running, setRunning] = useState(false)
   const run = async () => {
     if (!activeImageId) { alert('请先选择图片'); return }
     if (matMode === 'box' && !matBox) { alert('请先在画布上拖拽框选要抠的区域'); return }
+    if (matMode === 'point' && matPoints.length === 0) { alert('请先在画布上点选：左键点前景目标，Shift/右键点背景'); return }
     setRunning(true); setBusy(activeImageId, true)
     try {
-      const res = await matte({ image_id: activeImageId, mode: matMode, classes: mattingState.classes.split(/\s+/).filter(Boolean), box: matMode === 'box' ? matBox ?? undefined : undefined, feather: mattingState.feather })
+      const res = await matte({
+        image_id: activeImageId, mode: matMode,
+        classes: mattingState.classes.split(/\s+/).filter(Boolean),
+        box: matMode === 'box' ? matBox ?? undefined : undefined,
+        points: matMode === 'point' ? matPoints.map((p) => [p.x, p.y]) : undefined,
+        point_labels: matMode === 'point' ? matPoints.map((p) => (p.fg ? 1 : 0)) : undefined,
+        feather: mattingState.feather,
+      })
       setMatte(activeImageId, { png_b64: res.png_b64, instances: res.instances })
     } catch (e) { alert(`抠图失败：${(e as Error).message}`) } finally { setRunning(false); setBusy(activeImageId, false) }
   }
   return (
     <>
       <div style={{ display: 'flex', gap: 4, background: 'var(--panel2)', borderRadius: 7, padding: 3 }}>
-        {([['auto', '一键去背'], ['text', '文字抠图'], ['box', '框选(grabCut)']] as const).map(([k, l]) => (
+        {([['auto', '一键去背'], ['text', '文字抠图'], ['box', '框选(SAM)'], ['point', '点选(SAM)']] as const).map(([k, l]) => (
           <button key={k} onClick={() => setMatMode(k)} style={segStyle(matMode === k)}>{l}</button>
         ))}
       </div>
       {matMode === 'text' && (
         <input defaultValue={mattingState.classes} onChange={(e) => { mattingState.classes = e.target.value }} placeholder="英文目标，如 ship boat" style={{ background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 8, padding: '7px 11px', color: 'var(--text)', fontSize: 12.5, outline: 'none', width: 180 }} />
       )}
-      {matMode === 'box' && <span style={{ fontSize: 11.5, color: matBox ? 'var(--green)' : 'var(--amber)' }}>{matBox ? '已框选 ✓ 可重新拖拽' : '在画布上拖拽框选区域'}</span>}
+      {matMode === 'box' && <span style={{ fontSize: 11.5, color: matBox ? 'var(--green)' : 'var(--amber)' }}>{matBox ? '已框选 ✓ 可重新拖拽' : '画布上拖拽框选目标'}</span>}
+      {matMode === 'point' && (
+        <span style={{ fontSize: 11.5, color: matPoints.length ? 'var(--green)' : 'var(--amber)', display: 'flex', alignItems: 'center', gap: 8 }}>
+          已点 {matPoints.length} · 左键前景 / Shift·右键背景
+          {matPoints.length > 0 && <button onClick={clearMatPoints} style={{ fontSize: 11, color: 'var(--text2)', background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 6, padding: '3px 8px', cursor: 'pointer' }}>清空点</button>}
+        </span>
+      )}
       <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
         <span style={{ fontSize: 11.5, color: 'var(--text3)' }}>羽化</span>
         <input type="range" min={0} max={10} defaultValue={mattingState.feather} onChange={(e) => { mattingState.feather = parseInt(e.target.value) }} style={{ width: 70, accentColor: 'var(--accent)' }} />
@@ -314,19 +330,43 @@ function MattingCanvas() {
   const image = useData(selActiveImage)
   const mattes = useData((s) => s.mattes)
   const matMode = useData((s) => s.matMode)
+  const matPoints = useData((s) => s.matPoints)
   const setMatBox = useData((s) => s.setMatBox)
+  const addMatPoint = useData((s) => s.addMatPoint)
   const res = activeImageId ? mattes[activeImageId] : undefined
   const outerRef = useRef<HTMLDivElement>(null)
   const imgRef = useRef<HTMLImageElement>(null)
   const [drag, setDrag] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null)
-  const drawing = !res && !!image && matMode === 'box'
+  const [, setTick] = useState(0)
+  const boxMode = !res && !!image && matMode === 'box'
+  const pointMode = !res && !!image && matMode === 'point'
+
+  useEffect(() => {
+    if (!outerRef.current) return
+    const ro = new ResizeObserver(() => setTick((t) => t + 1))
+    ro.observe(outerRef.current)
+    return () => ro.disconnect()
+  }, [])
 
   const rel = (cx: number, cy: number) => {
     const r = outerRef.current!.getBoundingClientRect()
     return { x: cx - r.left, y: cy - r.top }
   }
+  const toImgPx = (cx: number, cy: number): [number, number] => {
+    const ir = imgRef.current!.getBoundingClientRect()
+    const x = Math.max(0, Math.min(image!.width, ((cx - ir.left) * image!.width) / ir.width))
+    const y = Math.max(0, Math.min(image!.height, ((cy - ir.top) * image!.height) / ir.height))
+    return [x, y]
+  }
+  const screenOf = (px: number, py: number) => {
+    const img = imgRef.current, outer = outerRef.current
+    if (!img || !outer || !image) return null
+    const ir = img.getBoundingClientRect(), or = outer.getBoundingClientRect()
+    return { left: ir.left - or.left + (px * ir.width) / image.width, top: ir.top - or.top + (py * ir.height) / image.height }
+  }
+
   const onDown = (e: React.PointerEvent) => {
-    if (!drawing) return
+    if (!boxMode) return
     const p = rel(e.clientX, e.clientY)
     setDrag({ x0: p.x, y0: p.y, x1: p.x, y1: p.y })
   }
@@ -336,28 +376,40 @@ function MattingCanvas() {
     setDrag((d) => (d ? { ...d, x1: p.x, y1: p.y } : d))
   }
   const onUp = () => {
-    if (!drag || !image || !imgRef.current || !outerRef.current) { return }
-    const ir = imgRef.current.getBoundingClientRect()
-    const or = outerRef.current.getBoundingClientRect()
-    const ox = ir.left - or.left, oy = ir.top - or.top // 图相对外层的偏移
-    const clampX = (v: number) => Math.max(0, Math.min(ir.width, v - ox))
-    const clampY = (v: number) => Math.max(0, Math.min(ir.height, v - oy))
-    const fx = image.width / ir.width, fy = image.height / ir.height
-    const x1 = Math.min(drag.x0, drag.x1), x2 = Math.max(drag.x0, drag.x1)
-    const y1 = Math.min(drag.y0, drag.y1), y2 = Math.max(drag.y0, drag.y1)
-    const box = [clampX(x1) * fx, clampY(y1) * fy, clampX(x2) * fx, clampY(y2) * fy]
-    if (box[2] - box[0] > 4 && box[3] - box[1] > 4) setMatBox(box)
+    if (!drag || !image || !imgRef.current) { return }
+    const x1 = Math.min(drag.x0, drag.x1), y1 = Math.min(drag.y0, drag.y1)
+    const x2 = Math.max(drag.x0, drag.x1), y2 = Math.max(drag.y0, drag.y1)
+    const or = outerRef.current!.getBoundingClientRect()
+    const [ix1, iy1] = toImgPx(or.left + x1, or.top + y1)
+    const [ix2, iy2] = toImgPx(or.left + x2, or.top + y2)
+    if (ix2 - ix1 > 4 && iy2 - iy1 > 4) setMatBox([ix1, iy1, ix2, iy2])
     else setDrag(null)
+  }
+  const onClick = (e: React.MouseEvent) => {
+    if (!pointMode || !imgRef.current) return
+    const [x, y] = toImgPx(e.clientX, e.clientY)
+    addMatPoint({ x, y, fg: !e.shiftKey })
+  }
+  const onContext = (e: React.MouseEvent) => {
+    if (!pointMode) return
+    e.preventDefault()
+    if (!imgRef.current) return
+    const [x, y] = toImgPx(e.clientX, e.clientY)
+    addMatPoint({ x, y, fg: false })
   }
 
   return (
-    <div ref={outerRef} onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp}
-      style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', background: 'var(--canvas)', backgroundImage: res ? `${CHECKER}` : undefined, backgroundSize: '20px 20px', backgroundPosition: '0 0,0 10px,10px -10px,-10px 0', cursor: drawing ? 'crosshair' : 'default', touchAction: 'none', userSelect: 'none' }}>
+    <div ref={outerRef} onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onClick={onClick} onContextMenu={onContext}
+      style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', background: 'var(--canvas)', backgroundImage: res ? `${CHECKER}` : undefined, backgroundSize: '20px 20px', backgroundPosition: '0 0,0 10px,10px -10px,-10px 0', cursor: boxMode || pointMode ? 'crosshair' : 'default', touchAction: 'none', userSelect: 'none' }}>
       {res ? <img src={`data:image/png;base64,${res.png_b64}`} alt="matte" style={{ maxWidth: '82%', maxHeight: '88%', objectFit: 'contain' }} />
         : image ? <img ref={imgRef} src={image.url} alt={image.filename} draggable={false} style={{ maxWidth: '78%', maxHeight: '85%', objectFit: 'contain', opacity: 0.9, borderRadius: 4 }} />
         : null}
-      {drawing && drag && <div style={{ position: 'absolute', left: Math.min(drag.x0, drag.x1), top: Math.min(drag.y0, drag.y1), width: Math.abs(drag.x1 - drag.x0), height: Math.abs(drag.y1 - drag.y0), border: '2px solid var(--accent)', background: 'rgba(25,200,184,.15)', pointerEvents: 'none' }} />}
-      {drawing && <div style={{ position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)', pointerEvents: 'none', background: 'rgba(0,0,0,.55)', borderRadius: 20, padding: '5px 13px', fontSize: 11, color: 'rgba(255,255,255,.85)' }}>拖拽框选要抠的区域，再点「抠图」</div>}
+      {boxMode && drag && <div style={{ position: 'absolute', left: Math.min(drag.x0, drag.x1), top: Math.min(drag.y0, drag.y1), width: Math.abs(drag.x1 - drag.x0), height: Math.abs(drag.y1 - drag.y0), border: '2px solid var(--accent)', background: 'rgba(25,200,184,.15)', pointerEvents: 'none' }} />}
+      {pointMode && matPoints.map((p, i) => {
+        const s = screenOf(p.x, p.y)
+        return s ? <span key={i} style={{ position: 'absolute', left: s.left - 6, top: s.top - 6, width: 12, height: 12, borderRadius: '50%', border: '2px solid #fff', background: p.fg ? 'var(--green)' : 'var(--red)', pointerEvents: 'none', boxShadow: '0 0 4px rgba(0,0,0,.6)' }} /> : null
+      })}
+      {(boxMode || pointMode) && <div style={{ position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)', pointerEvents: 'none', background: 'rgba(0,0,0,.55)', borderRadius: 20, padding: '5px 13px', fontSize: 11, color: 'rgba(255,255,255,.85)' }}>{boxMode ? '拖拽框选目标，再点「抠图」' : '左键点前景 / Shift·右键点背景，再点「抠图」'}</div>}
     </div>
   )
 }

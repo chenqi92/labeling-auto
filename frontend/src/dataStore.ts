@@ -34,8 +34,9 @@ interface DataState {
   mattes: Record<string, { png_b64: string; instances: { label: string; area_pct: number }[] }>
   elementsMap: Record<string, { idx: number; name: string; cls: string; area_pct: number; thumb_b64: string }[]>
   elementSel: Record<string, Record<number, boolean>>
-  matMode: string // auto | text | box
+  matMode: string // auto | text | box | point
   matBox: number[] | null // 框选模式下画布上的框（原图像素 [x1,y1,x2,y2]）
+  matPoints: { x: number; y: number; fg: boolean }[] // 点选模式：前景/背景点（原图像素）
   imgQuery: string // 顶栏搜索：按文件名过滤图片列表
 
   loadProjects: () => Promise<void>
@@ -71,6 +72,8 @@ interface DataState {
   toggleElement: (iid: string, idx: number) => void
   setMatMode: (m: string) => void
   setMatBox: (b: number[] | null) => void
+  addMatPoint: (p: { x: number; y: number; fg: boolean }) => void
+  clearMatPoints: () => void
   setImgQuery: (q: string) => void
   refreshProjectCounts: () => Promise<void>
 }
@@ -97,6 +100,7 @@ export const useData = create<DataState>()((set, get) => ({
   elementSel: {},
   matMode: 'auto',
   matBox: null,
+  matPoints: [],
   imgQuery: '',
 
   loadProjects: async () => {
@@ -291,8 +295,10 @@ export const useData = create<DataState>()((set, get) => ({
     const cur = s.elementSel[iid] ?? {}
     return { elementSel: { ...s.elementSel, [iid]: { ...cur, [idx]: !cur[idx] } } }
   }),
-  setMatMode: (m) => set({ matMode: m, matBox: null }),
+  setMatMode: (m) => set({ matMode: m, matBox: null, matPoints: [] }),
   setMatBox: (b) => set({ matBox: b }),
+  addMatPoint: (p) => set((s) => ({ matPoints: [...s.matPoints, p] })),
+  clearMatPoints: () => set({ matPoints: [] }),
   setImgQuery: (q) => set({ imgQuery: q }),
 
   refreshProjectCounts: async () => {

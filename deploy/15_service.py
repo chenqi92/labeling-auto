@@ -27,6 +27,10 @@ Environment=HF_HUB_OFFLINE=1
 Environment=PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 Environment=LA_VQA_MODEL=qwen3.5:9b-q8_0
 Environment=LA_OLLAMA_URL=http://127.0.0.1:11434
+Environment=HTTP_PROXY=http://127.0.0.1:1081
+Environment=HTTPS_PROXY=http://127.0.0.1:1081
+Environment=NO_PROXY=127.0.0.1,localhost
+Environment=YOLO_CONFIG_DIR=/data/ultralytics
 ExecStart={APP}/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000
 Restart=on-failure
 RestartSec=5

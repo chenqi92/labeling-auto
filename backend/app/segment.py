@@ -31,6 +31,42 @@ AUTO_VOCAB = [
 ]
 
 _seg_models: dict = {}
+_sam_models: dict = {}     # SAM 交互式分割（点选/框选精确掩膜）
+_bg_session: dict = {}     # rembg 去背 session 缓存（BiRefNet 等）
+DEFAULT_SAM = "sam2.1_b.pt"
+
+
+def _ensure_sam(name: str = DEFAULT_SAM):
+    """懒加载 SAM 交互式分割模型（与 YOLOE 同 weights 目录，权重经代理自动下载）。"""
+    import os
+    os.environ.setdefault("YOLO_CONFIG_DIR", settings.yoloe_config_dir)
+    if name not in _sam_models:
+        from ultralytics import SAM
+        path = os.path.join(settings.yoloe_weights_dir, name)
+        _sam_models[name] = SAM(path if os.path.exists(path) else name)
+    return _sam_models[name]
+
+
+def _sam_mask(pil, box=None, points=None, labels=None, name: str = DEFAULT_SAM):
+    """SAM 交互式分割 -> bool 掩膜。box=[x1,y1,x2,y2]；points=[[x,y],...] labels=[1前景/0背景]。"""
+    import numpy as np
+    from PIL import Image
+    m = _ensure_sam(name)
+    kw: dict = {"verbose": False}
+    if box is not None:
+        kw["bboxes"] = [float(v) for v in box]
+    if points is not None:
+        kw["points"] = points
+        kw["labels"] = labels if labels is not None else [1] * len(points)
+    res = m.predict(pil, **kw)[0]
+    if res.masks is None or len(res.masks.data) == 0:
+        raise HTTPException(422, detail="SAM 未产生掩膜")
+    data = res.masks.data
+    data = data.cpu().numpy() if hasattr(data, "cpu") else np.asarray(data)
+    mask = data[0] > 0.5  # 取第一掩膜；ultralytics 已对齐原图尺寸
+    if mask.shape != (pil.height, pil.width):
+        mask = np.asarray(Image.fromarray((mask * 255).astype("uint8")).resize((pil.width, pil.height))) > 127
+    return mask
 
 
 def _ensure_seg(variant: str):
@@ -128,21 +164,31 @@ def _grabcut(pil, box, iters: int = 5):
     return (mask == cv2.GC_FGD) | (mask == cv2.GC_PR_FGD)
 
 
+def _bg(name: str):
+    """缓存 rembg session（BiRefNet/u2net）。"""
+    if name not in _bg_session:
+        from rembg import new_session
+        _bg_session[name] = new_session(name)
+    return _bg_session[name]
+
+
 def _remove_bg(pil):
-    """一键去背：优先 rembg，否则退化为 YOLOE-seg 主体并集。返回 bool 掩膜。"""
+    """一键去背：优先 BiRefNet（发丝/细边远胜 u2net），失败退 u2net，再退 YOLOE-seg 主体并集。"""
     import numpy as np
-    try:
-        from rembg import remove
-        out = remove(pil.convert("RGBA"))
-        return np.array(out)[..., 3] > 10
-    except Exception:
-        insts = _instances(pil, [], settings.yoloe_conf, DEFAULT_SEG)
-        if not insts:
-            raise HTTPException(503, detail="未安装 rembg 且 YOLOE-seg 未检出主体，无法去背")
-        m = np.zeros((pil.height, pil.width), bool)
-        for it in insts:
-            m |= it["mask"]
-        return m
+    for sess in (settings.rembg_session, "u2net"):
+        try:
+            from rembg import remove
+            out = remove(pil.convert("RGBA"), session=_bg(sess))
+            return np.array(out)[..., 3] > 10
+        except Exception:
+            continue
+    insts = _instances(pil, [], settings.yoloe_conf, DEFAULT_SEG)
+    if not insts:
+        raise HTTPException(503, detail="rembg 不可用且 YOLOE-seg 未检出主体，无法去背")
+    m = np.zeros((pil.height, pil.width), bool)
+    for it in insts:
+        m |= it["mask"]
+    return m
 
 
 # ---------------- Schemas ----------------
@@ -168,9 +214,12 @@ class SegResponse(BaseModel):
 
 class MatteRequest(BaseModel):
     image_id: str
-    mode: str = "auto"            # auto(去背) | text | box
+    mode: str = "auto"            # auto(去背) | text | box | point
     classes: list[str] = []
     box: list[float] | None = None
+    points: list[list[float]] | None = None   # 点选模式：[[x,y],...]（原图像素）
+    point_labels: list[int] | None = None     # 1=前景 0=背景，与 points 等长
+    engine: str = "sam"           # box 模式引擎：sam(精确) | grabcut(CPU 兜底)
     feather: int = Field(0, ge=0, le=100)
     variant: str = DEFAULT_SEG
 
@@ -258,7 +307,12 @@ def api_matte(req: MatteRequest, _: UserOut = Depends(current_user)) -> MatteRes
         if req.mode == "box":
             if not req.box:
                 raise HTTPException(400, detail="框选模式需提供 box")
-            mask = _grabcut(pil, req.box)
+            # 默认走 SAM 精确掩膜；显式 engine=grabcut 时用 CPU grabCut 兜底
+            mask = _grabcut(pil, req.box) if req.engine == "grabcut" else _sam_mask(pil, box=req.box)
+        elif req.mode == "point":
+            if not req.points:
+                raise HTTPException(400, detail="点选模式需提供 points")
+            mask = _sam_mask(pil, points=req.points, labels=req.point_labels)
         elif req.mode == "text":
             insts = _instances(pil, req.classes, settings.yoloe_conf, req.variant)
             if not insts:
