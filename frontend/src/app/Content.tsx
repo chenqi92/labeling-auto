@@ -4,10 +4,10 @@ import { useApp } from '../appStore'
 import Workbench from './Workbench'
 import Users from './pages/Users'
 import Settings from './pages/Settings'
+import Projects from './pages/Projects'
 import { NoPerm, StubPage } from './ui'
 
 const STUB_META: Record<string, [string, string]> = {
-  projects: ['项目与数据集', '图片库 · 数据集版本 · 成员权限'],
   annotation: ['数据标注', '画框 / 分割掩膜 / 关键点 · 自动预标注 · 快捷键工作流'],
   training: ['模型训练', '向导式创建 · 实时曲线 / 日志 / 进度 · 上架为可用模型'],
   trainWizard: ['新建训练任务', '向导式 5 步'],
@@ -23,6 +23,7 @@ export default function Content() {
   const role = useApp((s) => s.user?.role ?? 'guest')
 
   if (view === 'workbench') return <Workbench />
+  if (view === 'projects') return <Projects />
   if (view === 'admin') return role === 'admin' ? <Users /> : <NoPerm />
   if (view === 'monitor' && role !== 'admin') return <NoPerm />
   if (view === 'settings') return <Settings />

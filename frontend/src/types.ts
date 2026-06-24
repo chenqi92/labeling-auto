@@ -33,6 +33,55 @@ export interface User {
   online: boolean
 }
 
+// —— 后端持久化的项目数据（dataStore 使用）——
+export interface ProjectInfo {
+  id: string
+  name: string
+  images: number
+  labeled: number
+  boxes: number
+  classes: number
+  created_at: number
+}
+
+export interface ProjImage {
+  id: string
+  filename: string
+  width: number
+  height: number
+  url: string
+  status: string // todo | done | reviewed
+  boxes: number
+}
+
+export interface Cls {
+  id: number // = 项目内 idx，= YOLO class_id
+  name: string
+  color: string
+}
+
+/** 后端标注记录（坐标为原图像素）。 */
+export interface Ann {
+  id?: string
+  class_idx: number
+  x1: number
+  y1: number
+  x2: number
+  y2: number
+  score?: number | null
+  source: string // auto | manual
+}
+
+export interface DatasetVersion {
+  id: string
+  name: string
+  sample_count: number
+  class_count: number
+  box_count: number
+  split: string
+  created_at: number
+}
+
 export interface ImageItem {
   id: string
   filename: string

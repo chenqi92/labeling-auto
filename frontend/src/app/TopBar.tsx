@@ -1,7 +1,7 @@
 /** 顶栏：logo · 项目切换 · 搜索 · GPU 状态灯 · 通知 · 主题 · 用户菜单。
  *  项目数据来自 store.ts；会话/主题/菜单来自 appStore。GPU 显存看板在 Phase 4 接真实遥测。 */
 import { useApp } from '../appStore'
-import { useStore } from '../store'
+import { useData } from '../dataStore'
 import { logout as apiLogout } from '../authApi'
 import { Icon, Svg } from './ui'
 
@@ -12,10 +12,10 @@ export default function TopBar() {
   const goView = useApp((s) => s.goView)
   const clearSession = useApp((s) => s.clearSession)
 
-  const projects = useStore((s) => s.projects)
-  const activeProjectId = useStore((s) => s.activeProjectId)
-  const setActiveProject = useStore((s) => s.setActiveProject)
-  const model = useStore((s) => s.model)
+  const projects = useData((s) => s.projects)
+  const activeProjectId = useData((s) => s.activeProjectId)
+  const setActiveProject = useData((s) => s.setActiveProject)
+  const model = useData((s) => s.model)
 
   const curProject = projects.find((p) => p.id === activeProjectId) ?? projects[0]
   const gpuColor = model.state === 'ready' ? 'var(--green)' : model.state === 'loading' ? 'var(--amber)' : model.state === 'error' ? 'var(--red)' : 'var(--text3)'
@@ -48,7 +48,7 @@ export default function TopBar() {
         <button onClick={() => setMenu('proj')} style={{ display: 'flex', alignItems: 'center', gap: 9, background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 8, padding: '7px 12px', cursor: 'pointer', color: 'var(--text)' }}>
           <Svg path='<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/>' size={15} color="var(--accent)" />
           <div style={{ fontSize: 13, fontWeight: 600, lineHeight: 1.1, whiteSpace: 'nowrap' }}>{curProject?.name ?? '无项目'}</div>
-          <span style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>{curProject?.images.length ?? 0}图</span>
+          <span style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>{curProject?.images ?? 0}图</span>
           <Icon name="chevron" size={13} color="var(--text3)" sw={2} />
         </button>
         {openMenu === 'proj' && (
@@ -58,7 +58,7 @@ export default function TopBar() {
               <button key={p.id} onClick={() => { setActiveProject(p.id); useApp.getState().closeMenus() }} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'transparent', border: 'none', borderRadius: 8, padding: '9px', cursor: 'pointer', color: 'var(--text)' }}>
                 <div style={{ textAlign: 'left' }}>
                   <div style={{ fontSize: 13, fontWeight: 500 }}>{p.name}</div>
-                  <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 1 }}>{p.images.length} 图 · {p.classes.length} 类</div>
+                  <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 1 }}>{p.images} 图 · {p.classes} 类</div>
                 </div>
                 {p.id === activeProjectId && <Svg path='<path d="M5 12l5 5 9-10"/>' size={15} color="var(--accent)" sw={2.2} />}
               </button>

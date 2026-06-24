@@ -69,6 +69,12 @@ export const ICONS: Record<string, string> = {
   back: '<path d="M15 18l-6-6 6-6"/>',
   download: '<path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14"/>',
   check: '<path d="M5 12l5 5L20 7"/>',
+  close: '<path d="M6 6l12 12M18 6L6 18"/>',
+  trash: '<path d="M4 7h16M9 7V5a2 2 0 012-2h2a2 2 0 012 2v2M6 7l1 13a2 2 0 002 2h6a2 2 0 002-2l1-13"/>',
+  upload: '<path d="M12 16V4m0 0l-4 4m4-4l4 4M5 20h14"/>',
+  eye: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="2.5"/>',
+  copy: '<rect x="8" y="8" width="13" height="13" rx="2"/><path d="M5 16V5a2 2 0 012-2h9"/>',
+  play: '<path d="M7 5l11 7-11 7V5z"/>',
 }
 
 export function Icon({ name, size, sw, color, style }: { name: string; size?: number; sw?: number; color?: string; style?: CSSProperties }) {

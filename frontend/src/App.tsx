@@ -1,8 +1,8 @@
 import { useEffect } from 'react'
 import { useApp } from './appStore'
 import { fetchMe } from './authApi'
-import { getEngines, getModelStatus, getTasks, listImages } from './api'
-import { useStore } from './store'
+import { getModelStatus } from './api'
+import { useData } from './dataStore'
 import Login from './app/Login'
 import Shell from './app/Shell'
 
@@ -24,28 +24,19 @@ export default function App() {
       .then(setUser)
       .catch(() => clearSession())
       .finally(() => setAuthReady(true))
-    // 仅在挂载时跑一次
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const authed = !!token && !!user
 
-  // 项目数据 store 初始化（登录后）
-  const ensureProject = useStore((s) => s.ensureProject)
-  const importOrphanImages = useStore((s) => s.importOrphanImages)
-  const setTasks = useStore((s) => s.setTasks)
-  const setEngines = useStore((s) => s.setEngines)
-  const setModel = useStore((s) => s.setModel)
-  const modelState = useStore((s) => s.model.state)
+  const loadBootstrap = useData((s) => s.loadBootstrap)
+  const setModel = useData((s) => s.setModel)
+  const modelState = useData((s) => s.model.state)
 
   useEffect(() => {
     if (!authed) return
-    ensureProject()
-    getTasks().then(setTasks).catch(() => undefined)
-    getEngines().then(setEngines).catch(() => undefined)
-    getModelStatus().then(setModel).catch(() => undefined)
-    listImages().then(importOrphanImages).catch(() => undefined)
-  }, [authed, ensureProject, importOrphanImages, setTasks, setEngines, setModel])
+    loadBootstrap()
+  }, [authed, loadBootstrap])
 
   useEffect(() => {
     if (modelState !== 'loading') return
