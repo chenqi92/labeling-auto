@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { getSettings, putSettings } from '../../api2'
 import { useApp } from '../../appStore'
 import { Btn, Card, Page, PageHead } from '../ui'
+import { toast } from '../overlays'
 
 const FIELDS: [string, string][] = [
   ['default_detect_model', '默认检测模型'],
@@ -23,7 +24,7 @@ export default function Settings() {
   const save = async () => {
     setSaving(true)
     try { const r = await putSettings(vals); setVals(r); setDirty(false) }
-    catch (e) { alert((e as Error).message) } finally { setSaving(false) }
+    catch (e) { toast((e as Error).message) } finally { setSaving(false) }
   }
 
   return (

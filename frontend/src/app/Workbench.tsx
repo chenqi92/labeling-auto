@@ -8,6 +8,7 @@ import { downloadBlob, elements as apiElements, exportElements, matte } from '..
 import type { Capability, ProjImage } from '../types'
 import WbCanvas from './WbCanvas'
 import { Icon } from './ui'
+import { toast } from './overlays'
 
 const CAP_LABEL: Record<Capability, string> = {
   detect: '目标检测 / 智能识别', vqa: '状态巡检 / 视觉问答', ocr: '文字提取 OCR', matting: '抠图 / 分割', element: '图片元素拆解',
@@ -61,7 +62,7 @@ function ImageList() {
           <span style={{ fontSize: 12, fontWeight: 600 }}>素材 · {images.length}</span>
           <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--accent)', background: 'var(--accent-ghost)', borderRadius: 6, padding: '5px 8px', cursor: uploading ? 'wait' : 'pointer' }}>
             <Icon name="plus" size={12} color="currentColor" sw={2.2} />{uploading ? '上传中' : '上传'}
-            <input type="file" accept="image/*" multiple disabled={uploading} style={{ display: 'none' }} onChange={async (e) => { const f = Array.from(e.target.files ?? []); e.target.value = ''; if (f.length) { try { await uploadFiles(f) } catch (err) { alert(`上传失败：${(err as Error).message}`) } } }} />
+            <input type="file" accept="image/*" multiple disabled={uploading} style={{ display: 'none' }} onChange={async (e) => { const f = Array.from(e.target.files ?? []); e.target.value = ''; if (f.length) { try { await uploadFiles(f) } catch (err) { toast(`上传失败：${(err as Error).message}`) } } }} />
           </label>
         </div>
         <div style={{ display: 'flex', gap: 5 }}>
@@ -93,7 +94,7 @@ function Toolbar() {
   const label = CAP_LABEL[capability]
   return (
     <div style={{ flex: '0 0 auto', borderBottom: '1px solid var(--border)', background: 'var(--chrome)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, rowGap: 8, padding: '10px 16px', flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--accent-ghost)', border: '1px solid rgba(25,200,184,.25)', borderRadius: 8, padding: '7px 11px', whiteSpace: 'nowrap' }}>
           <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--accent)' }} />
           <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--accent)' }}>{label}</span>
@@ -129,9 +130,9 @@ function DetectControls() {
   const addTag = (v: string) => { const t = v.trim(); if (t && !tags.includes(t)) setTags([...tags, t]) }
   const run = async (all: boolean) => {
     const q = tags.join(' ').trim()
-    if (!q) { alert('请先输入检测目标（类别）'); return }
+    if (!q) { toast('请先输入检测目标（类别）'); return }
     const ids = all ? images.map((i) => i.id) : activeImageId ? [activeImageId] : []
-    if (!ids.length) { alert('请先选择图片'); return }
+    if (!ids.length) { toast('请先选择图片'); return }
     setRunning(true)
     try {
       for (const id of ids) {
@@ -142,7 +143,7 @@ function DetectControls() {
           await applyDetections(id, res.boxes.filter((b) => (b.score ?? 1) >= thresh))
         } finally { setBusy(id, false) }
       }
-    } catch (e) { alert(`检测失败：${(e as Error).message}`) } finally { setRunning(false) }
+    } catch (e) { toast(`检测失败：${(e as Error).message}`) } finally { setRunning(false) }
   }
 
   return (
@@ -206,13 +207,13 @@ function VqaControls() {
   const setInspection = useData((s) => s.setInspection)
   const [running, setRunning] = useState(false)
   const run = async () => {
-    if (!activeImageId) { alert('请先选择图片'); return }
-    if (!vqaState.q.trim()) { alert('请先输入要判断的问题'); return }
+    if (!activeImageId) { toast('请先选择图片'); return }
+    if (!vqaState.q.trim()) { toast('请先输入要判断的问题'); return }
     setRunning(true); setBusy(activeImageId, true)
     try {
       const res = await inspect({ image_id: activeImageId, query: vqaState.q })
       setInspection(activeImageId, res)
-    } catch (e) { alert(`巡检失败：${(e as Error).message}`) } finally { setRunning(false); setBusy(activeImageId, false) }
+    } catch (e) { toast(`巡检失败：${(e as Error).message}`) } finally { setRunning(false); setBusy(activeImageId, false) }
   }
   return (
     <>
@@ -232,12 +233,12 @@ function OcrControls() {
   const setRecognition = useData((s) => s.setRecognition)
   const [running, setRunning] = useState(false)
   const run = async () => {
-    if (!activeImageId) { alert('请先选择图片'); return }
+    if (!activeImageId) { toast('请先选择图片'); return }
     setRunning(true); setBusy(activeImageId, true)
     try {
       const res = await recognizeText({ image_id: activeImageId })
       setRecognition(activeImageId, res)
-    } catch (e) { alert(`识别失败：${(e as Error).message}`) } finally { setRunning(false); setBusy(activeImageId, false) }
+    } catch (e) { toast(`识别失败：${(e as Error).message}`) } finally { setRunning(false); setBusy(activeImageId, false) }
   }
   return (
     <>
@@ -278,9 +279,9 @@ function MattingControls() {
   const clearMatPoints = useData((s) => s.clearMatPoints)
   const [running, setRunning] = useState(false)
   const run = async () => {
-    if (!activeImageId) { alert('请先选择图片'); return }
-    if (matMode === 'box' && !matBox) { alert('请先在画布上拖拽框选要抠的区域'); return }
-    if (matMode === 'point' && matPoints.length === 0) { alert('请先在画布上点选：左键点前景目标，Shift/右键点背景'); return }
+    if (!activeImageId) { toast('请先选择图片'); return }
+    if (matMode === 'box' && !matBox) { toast('请先在画布上拖拽框选要抠的区域'); return }
+    if (matMode === 'point' && matPoints.length === 0) { toast('请先在画布上点选：左键点前景目标，Shift/右键点背景'); return }
     setRunning(true); setBusy(activeImageId, true)
     try {
       const res = await matte({
@@ -292,7 +293,7 @@ function MattingControls() {
         feather: mattingState.feather,
       })
       setMatte(activeImageId, { png_b64: res.png_b64, instances: res.instances })
-    } catch (e) { alert(`抠图失败：${(e as Error).message}`) } finally { setRunning(false); setBusy(activeImageId, false) }
+    } catch (e) { toast(`抠图失败：${(e as Error).message}`) } finally { setRunning(false); setBusy(activeImageId, false) }
   }
   return (
     <>
@@ -457,14 +458,14 @@ function ElementControls() {
   const [, force] = useState(0)
   const [running, setRunning] = useState(false)
   const run = async () => {
-    if (!activeImageId) { alert('请先选择图片'); return }
+    if (!activeImageId) { toast('请先选择图片'); return }
     setRunning(true); setBusy(activeImageId, true)
     try {
       const cls = elState.classes.split(/\s+/).filter(Boolean)
       elClassesByImage[activeImageId] = cls
       const res = await apiElements({ image_id: activeImageId, classes: cls, granularity: elState.granularity })
       setElements(activeImageId, res.elements)
-    } catch (e) { alert(`拆解失败：${(e as Error).message}`) } finally { setRunning(false); setBusy(activeImageId, false) }
+    } catch (e) { toast(`拆解失败：${(e as Error).message}`) } finally { setRunning(false); setBusy(activeImageId, false) }
   }
   return (
     <>
@@ -525,7 +526,7 @@ function ElementResults() {
     try {
       const selected = els.filter((e) => sel[e.idx]).map((e) => e.idx)
       downloadBlob(await exportElements({ image_id: activeImageId, classes: elClassesByImage[activeImageId] ?? [], selected }), 'elements.zip')
-    } catch (e) { alert((e as Error).message) }
+    } catch (e) { toast((e as Error).message) }
   }
   return (
     <>

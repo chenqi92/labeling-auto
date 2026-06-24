@@ -3,6 +3,7 @@ import { useApp } from '../appStore'
 import Content from './Content'
 import Nav from './Nav'
 import TopBar from './TopBar'
+import { Overlays } from './overlays'
 
 export default function Shell() {
   const theme = useApp((s) => s.theme)
@@ -20,7 +21,7 @@ export default function Shell() {
             <div style={{ flex: 1 }} />
             <div style={{ borderTop: '1px solid var(--border-soft)', paddingTop: 11, marginTop: 8 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '7px 10px', fontSize: 11, color: 'var(--text3)' }}>
-                <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--green)' }} />内网 · 在线 · v2.4.2 上传已修
+                <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--green)' }} />内网 · 在线 · v2.4.3 提示+OCR提速
               </div>
             </div>
           </div>
@@ -33,6 +34,7 @@ export default function Shell() {
 
       {/* 点击空白关闭顶栏弹层 */}
       {openMenu && <div onClick={closeMenus} style={{ position: 'fixed', inset: 0, zIndex: 35 }} />}
+      <Overlays />
     </div>
   )
 }

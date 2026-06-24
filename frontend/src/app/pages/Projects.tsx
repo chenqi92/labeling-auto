@@ -4,6 +4,7 @@ import { useApp } from '../../appStore'
 import { selProject, useData } from '../../dataStore'
 import type { ProjImage } from '../../types'
 import { Btn, Card, Icon, Page, PageHead } from '../ui'
+import { confirmDialog, promptDialog, toast } from '../overlays'
 
 type Filter = 'all' | 'todo' | 'done'
 
@@ -26,11 +27,11 @@ export default function Projects() {
 
   const [filter, setFilter] = useState<Filter>('all')
   const newProject = async () => {
-    const name = window.prompt('新项目名称：', '')
+    const name = await promptDialog('新项目名称：', '')
     if (name) await createProject(name)
   }
   const onDeleteProject = async (id: string, name: string) => {
-    if (window.confirm(`删除项目「${name}」及其所有图片与标注？此操作不可撤销。`)) await deleteProject(id)
+    if (await confirmDialog(`删除项目「${name}」及其所有图片与标注？此操作不可撤销。`)) await deleteProject(id)
   }
   const q = imgQuery.trim().toLowerCase()
   const shown: ProjImage[] = images.filter((i) => (filter === 'all' ? true : filter === 'done' ? i.status === 'done' : i.status !== 'done') && (!q || i.filename.toLowerCase().includes(q)))
@@ -75,7 +76,7 @@ export default function Projects() {
         <div style={{ display: 'flex', gap: 8 }}>
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--panel2)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: 8, padding: '9px 15px', fontSize: 13, fontWeight: 600, cursor: uploading || !activeId ? 'not-allowed' : 'pointer', opacity: uploading || !activeId ? 0.5 : 1 }}>
             <Icon name="download" size={15} sw={1.8} />{uploading ? '上传中…' : '上传图片'}
-            <input type="file" accept="image/*" multiple disabled={uploading || !activeId} style={{ display: 'none' }} onChange={async (e) => { const f = Array.from(e.target.files ?? []); e.target.value = ''; if (f.length) { try { await uploadFiles(f) } catch (err) { alert(`上传失败：${(err as Error).message}`) } } }} />
+            <input type="file" accept="image/*" multiple disabled={uploading || !activeId} style={{ display: 'none' }} onChange={async (e) => { const f = Array.from(e.target.files ?? []); e.target.value = ''; if (f.length) { try { await uploadFiles(f) } catch (err) { toast(`上传失败：${(err as Error).message}`) } } }} />
           </label>
         </div>
       </div>
@@ -96,7 +97,7 @@ export default function Projects() {
               onClick={() => { useData.getState().setActiveImage(im.id); openCapability('detect') }}>
               <img src={im.url} alt={im.filename} style={{ width: '100%', height: 92, objectFit: 'cover', display: 'block', background: 'var(--panel2)' }} />
               <span style={{ position: 'absolute', top: 7, right: 7, width: 8, height: 8, borderRadius: '50%', background: im.status === 'done' ? 'var(--green)' : 'var(--text3)' }} />
-              <button onClick={(e) => { e.stopPropagation(); if (window.confirm(`删除图片 ${im.filename}？`)) removeImage(im.id) }} style={{ position: 'absolute', top: 5, left: 5, width: 22, height: 22, borderRadius: 6, background: 'rgba(0,0,0,.5)', border: 'none', cursor: 'pointer', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <button onClick={async (e) => { e.stopPropagation(); if (await confirmDialog(`删除图片 ${im.filename}？`)) removeImage(im.id) }} style={{ position: 'absolute', top: 5, left: 5, width: 22, height: 22, borderRadius: 6, background: 'rgba(0,0,0,.5)', border: 'none', cursor: 'pointer', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <Icon name="trash" size={12} color="#fff" />
               </button>
               <div style={{ padding: '7px 9px', fontSize: 11, color: 'var(--text2)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', background: 'var(--panel)' }}>{im.filename}{im.boxes ? ` · ${im.boxes}框` : ''}</div>

@@ -4,6 +4,7 @@ import { createBatch } from '../../api2'
 import { useApp } from '../../appStore'
 import { selProject, useData } from '../../dataStore'
 import { Btn, Card, Page, PageHead } from '../ui'
+import { toast } from '../overlays'
 
 const CAPS: [string, string][] = [['detect', '目标检测'], ['vqa', '状态巡检 VQA'], ['ocr', '文字提取 OCR']]
 
@@ -17,12 +18,12 @@ export default function Batch() {
   const [submitting, setSubmitting] = useState(false)
 
   const submit = async () => {
-    if (!project) { alert('请先选择项目'); return }
+    if (!project) { toast('请先选择项目'); return }
     setSubmitting(true)
     try {
       await createBatch({ project_id: project.id, capability: cap, engine, query })
       goView('jobs')
-    } catch (e) { alert((e as Error).message) } finally { setSubmitting(false) }
+    } catch (e) { toast((e as Error).message) } finally { setSubmitting(false) }
   }
 
   return (

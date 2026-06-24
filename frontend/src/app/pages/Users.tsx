@@ -4,6 +4,7 @@ import { createUser, deleteUser, listUsers, updateUser } from '../../authApi'
 import { useApp } from '../../appStore'
 import type { Role, User } from '../../types'
 import { Btn, Card, Page, PageHead } from '../ui'
+import { confirmDialog, promptDialog, toast } from '../overlays'
 
 const ROLE_OPTS: { value: Role; label: string }[] = [
   { value: 'admin', label: '管理员' },
@@ -54,19 +55,19 @@ export default function Users() {
   }
 
   const onReset = async (u: User) => {
-    const pw = window.prompt(`为「${u.name || u.username}」设置新密码：`)
+    const pw = await promptDialog(`为「${u.name || u.username}」设置新密码：`)
     if (!pw) return
     try {
       await updateUser(u.id, { password: pw })
       setErr('')
-      window.alert('密码已重置')
+      toast('密码已重置', 'success')
     } catch (e) {
       setErr((e as Error).message)
     }
   }
 
   const onDelete = async (u: User) => {
-    if (!window.confirm(`删除用户「${u.name || u.username}」？`)) return
+    if (!(await confirmDialog(`删除用户「${u.name || u.username}」？`))) return
     try {
       await deleteUser(u.id)
       refresh()

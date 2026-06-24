@@ -96,6 +96,7 @@ def inspect(image_bytes: bytes, questions: list[str]) -> tuple[list[dict], str]:
             {"role": "user", "content": prompt, "images": [b64]},
         ],
         "stream": False,
+        "think": settings.vqa_think,  # 关思考提速（qwen3 等推理模型默认会长 CoT）
         "format": _FORMAT_SCHEMA,
         "keep_alive": settings.vqa_keep_alive,
         "options": {"temperature": 0.0, "num_predict": settings.vqa_max_new_tokens},
@@ -121,6 +122,7 @@ def recognize_text(image_bytes: bytes) -> tuple[str, str]:
         "model": settings.vqa_model,
         "messages": [{"role": "user", "content": prompt, "images": [b64]}],
         "stream": False,
+        "think": settings.vqa_think,  # 关思考提速：OCR 不需要 CoT
         "keep_alive": settings.vqa_keep_alive,
         "options": {"temperature": 0.0, "num_predict": 1024},
     }

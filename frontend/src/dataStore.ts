@@ -4,6 +4,7 @@ import { create } from 'zustand'
 import * as papi from './projectApi'
 import { getEngines, getModelStatus, getTasks } from './api'
 import type { Ann, Cls, DatasetVersion, EngineDef, InspectResponse, ModelStatus, ProjectInfo, ProjImage, RecognizeResponse, TaskDef } from './types'
+import { toast } from './app/overlays'
 
 const ACTIVE_KEY = 'vislab-active-project'
 
@@ -248,7 +249,7 @@ export const useData = create<DataState>()((set, get) => ({
       if (saveChains[iid] === chain) set((s) => ({ anns: { ...s.anns, [iid]: saved } }))
     }).catch((e) => {
       // 保存失败不能静默吞掉：提示用户并从服务端重载，避免乐观状态与后端不一致导致刷新丢标注
-      try { window.alert(`标注保存失败：${(e as Error).message}`) } catch { /* */ }
+      try { toast(`标注保存失败：${(e as Error).message}`) } catch { /* */ }
       void get().loadAnnotations(iid)
     })
     saveChains[iid] = chain

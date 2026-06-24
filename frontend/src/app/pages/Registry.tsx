@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { getRegistry, loadModel2, unloadModel2, type RegistryResp } from '../../api2'
 import { useApp } from '../../appStore'
 import { Card, Icon, Page, PageHead } from '../ui'
+import { toast } from '../overlays'
 
 const PALETTE = ['var(--accent)', 'var(--blue)', 'var(--amber)', 'var(--green)', '#a78bfa', 'var(--red)']
 type Filter = 'all' | 'loaded' | 'local' | 'remote'
@@ -22,7 +23,7 @@ export default function Registry() {
   const act = async (name: string, load: boolean) => {
     setBusy(name)
     try { await (load ? loadModel2(name) : unloadModel2(name)); await refresh() }
-    catch (e) { alert((e as Error).message) } finally { setBusy(null) }
+    catch (e) { toast((e as Error).message) } finally { setBusy(null) }
   }
 
   if (!data) return <Page><PageHead title="模型管理 / 引擎" sub="加载中…" /></Page>

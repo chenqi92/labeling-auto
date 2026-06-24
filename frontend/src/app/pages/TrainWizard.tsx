@@ -4,6 +4,7 @@ import { createTraining } from '../../api2'
 import { useApp } from '../../appStore'
 import { selProject, useData } from '../../dataStore'
 import { Btn, Card, Icon, Page, PageHead } from '../ui'
+import { toast } from '../overlays'
 
 const STEPS = ['任务类型', '基础模型', '数据集', '超参', '启动']
 const TYPES: [string, string, string][] = [
@@ -27,13 +28,13 @@ export default function TrainWizard() {
   const [starting, setStarting] = useState(false)
 
   const start = async () => {
-    if (!project) { alert('请先选择项目'); return }
+    if (!project) { toast('请先选择项目'); return }
     setStarting(true)
     try {
       const job = await createTraining({ project_id: project.id, name: `${project.name}-${type}`, task: type, base, epochs, train_ratio: splitVal / 100 })
       setFocusJob(job.id)
       goView('trainMonitor')
-    } catch (e) { alert((e as Error).message) } finally { setStarting(false) }
+    } catch (e) { toast((e as Error).message) } finally { setStarting(false) }
   }
 
   return (

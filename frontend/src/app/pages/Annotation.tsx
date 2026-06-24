@@ -5,6 +5,7 @@ import { detect } from '../../api'
 import { downloadBlob, exportProject } from '../../api2'
 import WbCanvas from '../WbCanvas'
 import { Icon } from '../ui'
+import { confirmDialog, toast } from '../overlays'
 
 export default function Annotation() {
   const images = useData((s) => s.images)
@@ -32,18 +33,18 @@ export default function Annotation() {
   const prelabel = async () => {
     if (!activeImageId) return
     const q = classes.map((c) => c.name).join(' ').trim()
-    if (!q) { alert('先在右侧添加至少一个类别，自动预标注按类别名检测'); return }
+    if (!q) { toast('先在右侧添加至少一个类别，自动预标注按类别名检测'); return }
     setPrelabeling(true); setBusy(activeImageId, true)
     try {
       const res = await detect({ image_id: activeImageId, query: q, task: 'detection', engine: 'la' })
       await applyDetections(activeImageId, res.boxes)
-    } catch (e) { alert(`预标注失败：${(e as Error).message}`) } finally { setPrelabeling(false); setBusy(activeImageId, false) }
+    } catch (e) { toast(`预标注失败：${(e as Error).message}`) } finally { setPrelabeling(false); setBusy(activeImageId, false) }
   }
 
   const doExport = async (fmt: 'yolo' | 'coco') => {
     if (!project) return
     try { downloadBlob(await exportProject(project.id, fmt), `${project.name}-${fmt}.zip`) }
-    catch (e) { alert((e as Error).message) }
+    catch (e) { toast((e as Error).message) }
   }
 
   const reassign = (i: number, ci: number) => {
@@ -94,7 +95,7 @@ export default function Annotation() {
             <div key={c.id} onClick={() => setActiveClassId(c.id)} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '7px 9px', borderRadius: 7, marginBottom: 5, cursor: 'pointer', background: c.id === activeClassId ? 'var(--accent-ghost)' : 'var(--panel2)', border: `1px solid ${c.id === activeClassId ? 'rgba(25,200,184,.3)' : 'transparent'}` }}>
               <span style={{ width: 12, height: 12, borderRadius: 3, background: c.color }} />
               <span style={{ flex: 1, fontSize: 12.5 }}>{c.name}</span>
-              <button onClick={(e) => { e.stopPropagation(); if (confirm(`删除类别「${c.name}」及其标注？`)) removeClass(c.id) }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text3)', display: 'flex' }}><Icon name="trash" size={13} color="currentColor" /></button>
+              <button onClick={async (e) => { e.stopPropagation(); if (await confirmDialog(`删除类别「${c.name}」及其标注？`)) removeClass(c.id) }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text3)', display: 'flex' }}><Icon name="trash" size={13} color="currentColor" /></button>
             </div>
           ))}
           <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
