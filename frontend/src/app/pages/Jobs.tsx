@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { getJob, listJobs, stopJob, type JobDetail, type JobOut } from '../../api2'
 import { Btn, Card, Icon, Page, PageHead, ProgressBar, StatusPill } from '../ui'
 
-const TYPE_LABEL: Record<string, string> = { batch: '批量推理', training: '训练', export: '批量导出' }
+const TYPE_LABEL: Record<string, string> = { batch: '批量推理', training: '训练' }
 const FILTERS: [string, string][] = [['all', '全部'], ['running', '运行中'], ['queued', '排队'], ['success', '成功'], ['failed', '失败']]
 
 export default function Jobs() {

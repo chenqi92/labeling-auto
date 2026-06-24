@@ -16,6 +16,8 @@ export default function TopBar() {
   const activeProjectId = useData((s) => s.activeProjectId)
   const setActiveProject = useData((s) => s.setActiveProject)
   const model = useData((s) => s.model)
+  const imgQuery = useData((s) => s.imgQuery)
+  const setImgQuery = useData((s) => s.setImgQuery)
 
   const curProject = projects.find((p) => p.id === activeProjectId) ?? projects[0]
   const gpuColor = model.state === 'ready' ? 'var(--green)' : model.state === 'loading' ? 'var(--amber)' : model.state === 'error' ? 'var(--red)' : 'var(--text3)'
@@ -73,10 +75,10 @@ export default function TopBar() {
 
       <div style={{ flex: 1 }} />
 
-      {/* 搜索 */}
+      {/* 搜索：按文件名过滤当前项目图片 */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 8, padding: '7px 11px', width: 230 }}>
         <Icon name="search" size={14} color="var(--text3)" sw={1.8} />
-        <input placeholder="搜索图片 / 项目 / 任务" style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', color: 'var(--text)', fontSize: 12.5 }} />
+        <input value={imgQuery} onChange={(e) => setImgQuery(e.target.value)} placeholder="搜索图片（文件名）" style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', color: 'var(--text)', fontSize: 12.5 }} />
       </div>
 
       {/* GPU 状态灯 */}

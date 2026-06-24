@@ -49,16 +49,18 @@ function ImageList() {
   const uploading = useData((s) => s.uploading)
   const setActiveImage = useData((s) => s.setActiveImage)
   const uploadFiles = useData((s) => s.uploadFiles)
+  const imgQuery = useData((s) => s.imgQuery)
   const [filter, setFilter] = useState<'all' | 'todo' | 'done'>('all')
   const fileRef = useRef<HTMLInputElement>(null)
-  const shown = images.filter((i) => (filter === 'all' ? true : filter === 'done' ? i.status === 'done' : i.status !== 'done'))
+  const q = imgQuery.trim().toLowerCase()
+  const shown = images.filter((i) => (filter === 'all' ? true : filter === 'done' ? i.status === 'done' : i.status !== 'done') && (!q || i.filename.toLowerCase().includes(q)))
 
   return (
     <div style={{ width: 196, flex: '0 0 196px', background: 'var(--chrome)', borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       <div style={{ padding: '12px 12px 9px', borderBottom: '1px solid var(--border-soft)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 9 }}>
           <span style={{ fontSize: 12, fontWeight: 600 }}>素材 · {images.length}</span>
-          <input ref={fileRef} type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={(e) => { if (e.target.files?.length) uploadFiles(e.target.files); e.target.value = '' }} />
+          <input ref={fileRef} type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={async (e) => { const f = e.target.files; e.target.value = ''; if (f?.length) { try { await uploadFiles(f) } catch (err) { alert(`上传失败：${(err as Error).message}`) } } }} />
           <button onClick={() => fileRef.current?.click()} disabled={uploading} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--accent)', background: 'var(--accent-ghost)', border: 'none', borderRadius: 6, padding: '5px 8px', cursor: 'pointer' }}>
             <Icon name="plus" size={12} color="currentColor" sw={2.2} />{uploading ? '上传中' : '上传'}
           </button>
@@ -265,18 +267,21 @@ function ResultPanel() {
 }
 
 // ---------- 抠图 / 分割 ----------
-const mattingState = { mode: 'auto', classes: 'ship', feather: 2 }
+const mattingState = { classes: 'ship', feather: 2 }
 function MattingControls() {
   const activeImageId = useData((s) => s.activeImageId)
   const setBusy = useData((s) => s.setBusy)
   const setMatte = useData((s) => s.setMatte)
-  const [, force] = useState(0)
+  const matMode = useData((s) => s.matMode)
+  const matBox = useData((s) => s.matBox)
+  const setMatMode = useData((s) => s.setMatMode)
   const [running, setRunning] = useState(false)
   const run = async () => {
     if (!activeImageId) { alert('请先选择图片'); return }
+    if (matMode === 'box' && !matBox) { alert('请先在画布上拖拽框选要抠的区域'); return }
     setRunning(true); setBusy(activeImageId, true)
     try {
-      const res = await matte({ image_id: activeImageId, mode: mattingState.mode, classes: mattingState.classes.split(/\s+/).filter(Boolean), feather: mattingState.feather })
+      const res = await matte({ image_id: activeImageId, mode: matMode, classes: mattingState.classes.split(/\s+/).filter(Boolean), box: matMode === 'box' ? matBox ?? undefined : undefined, feather: mattingState.feather })
       setMatte(activeImageId, { png_b64: res.png_b64, instances: res.instances })
     } catch (e) { alert(`抠图失败：${(e as Error).message}`) } finally { setRunning(false); setBusy(activeImageId, false) }
   }
@@ -284,12 +289,13 @@ function MattingControls() {
     <>
       <div style={{ display: 'flex', gap: 4, background: 'var(--panel2)', borderRadius: 7, padding: 3 }}>
         {([['auto', '一键去背'], ['text', '文字抠图'], ['box', '框选(grabCut)']] as const).map(([k, l]) => (
-          <button key={k} onClick={() => { mattingState.mode = k; force((n) => n + 1) }} style={segStyle(mattingState.mode === k)}>{l}</button>
+          <button key={k} onClick={() => setMatMode(k)} style={segStyle(matMode === k)}>{l}</button>
         ))}
       </div>
-      {mattingState.mode === 'text' && (
+      {matMode === 'text' && (
         <input defaultValue={mattingState.classes} onChange={(e) => { mattingState.classes = e.target.value }} placeholder="英文目标，如 ship boat" style={{ background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 8, padding: '7px 11px', color: 'var(--text)', fontSize: 12.5, outline: 'none', width: 180 }} />
       )}
+      {matMode === 'box' && <span style={{ fontSize: 11.5, color: matBox ? 'var(--green)' : 'var(--amber)' }}>{matBox ? '已框选 ✓ 可重新拖拽' : '在画布上拖拽框选区域'}</span>}
       <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
         <span style={{ fontSize: 11.5, color: 'var(--text3)' }}>羽化</span>
         <input type="range" min={0} max={10} defaultValue={mattingState.feather} onChange={(e) => { mattingState.feather = parseInt(e.target.value) }} style={{ width: 70, accentColor: 'var(--accent)' }} />
@@ -308,12 +314,51 @@ function MattingCanvas() {
   const activeImageId = useData((s) => s.activeImageId)
   const image = useData(selActiveImage)
   const mattes = useData((s) => s.mattes)
+  const matMode = useData((s) => s.matMode)
+  const setMatBox = useData((s) => s.setMatBox)
   const res = activeImageId ? mattes[activeImageId] : undefined
+  const outerRef = useRef<HTMLDivElement>(null)
+  const imgRef = useRef<HTMLImageElement>(null)
+  const [drag, setDrag] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null)
+  const drawing = !res && !!image && matMode === 'box'
+
+  const rel = (cx: number, cy: number) => {
+    const r = outerRef.current!.getBoundingClientRect()
+    return { x: cx - r.left, y: cy - r.top }
+  }
+  const onDown = (e: React.PointerEvent) => {
+    if (!drawing) return
+    const p = rel(e.clientX, e.clientY)
+    setDrag({ x0: p.x, y0: p.y, x1: p.x, y1: p.y })
+  }
+  const onMove = (e: React.PointerEvent) => {
+    if (!drag) return
+    const p = rel(e.clientX, e.clientY)
+    setDrag((d) => (d ? { ...d, x1: p.x, y1: p.y } : d))
+  }
+  const onUp = () => {
+    if (!drag || !image || !imgRef.current || !outerRef.current) { return }
+    const ir = imgRef.current.getBoundingClientRect()
+    const or = outerRef.current.getBoundingClientRect()
+    const ox = ir.left - or.left, oy = ir.top - or.top // 图相对外层的偏移
+    const clampX = (v: number) => Math.max(0, Math.min(ir.width, v - ox))
+    const clampY = (v: number) => Math.max(0, Math.min(ir.height, v - oy))
+    const fx = image.width / ir.width, fy = image.height / ir.height
+    const x1 = Math.min(drag.x0, drag.x1), x2 = Math.max(drag.x0, drag.x1)
+    const y1 = Math.min(drag.y0, drag.y1), y2 = Math.max(drag.y0, drag.y1)
+    const box = [clampX(x1) * fx, clampY(y1) * fy, clampX(x2) * fx, clampY(y2) * fy]
+    if (box[2] - box[0] > 4 && box[3] - box[1] > 4) setMatBox(box)
+    else setDrag(null)
+  }
+
   return (
-    <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--canvas)', backgroundImage: res ? `${CHECKER}` : undefined, backgroundSize: '20px 20px', backgroundPosition: '0 0,0 10px,10px -10px,-10px 0' }}>
+    <div ref={outerRef} onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp}
+      style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', background: 'var(--canvas)', backgroundImage: res ? `${CHECKER}` : undefined, backgroundSize: '20px 20px', backgroundPosition: '0 0,0 10px,10px -10px,-10px 0', cursor: drawing ? 'crosshair' : 'default', touchAction: 'none', userSelect: 'none' }}>
       {res ? <img src={`data:image/png;base64,${res.png_b64}`} alt="matte" style={{ maxWidth: '82%', maxHeight: '88%', objectFit: 'contain' }} />
-        : image ? <img src={image.url} alt={image.filename} style={{ maxWidth: '78%', maxHeight: '85%', objectFit: 'contain', opacity: 0.85, borderRadius: 4 }} />
+        : image ? <img ref={imgRef} src={image.url} alt={image.filename} draggable={false} style={{ maxWidth: '78%', maxHeight: '85%', objectFit: 'contain', opacity: 0.9, borderRadius: 4 }} />
         : null}
+      {drawing && drag && <div style={{ position: 'absolute', left: Math.min(drag.x0, drag.x1), top: Math.min(drag.y0, drag.y1), width: Math.abs(drag.x1 - drag.x0), height: Math.abs(drag.y1 - drag.y0), border: '2px solid var(--accent)', background: 'rgba(25,200,184,.15)', pointerEvents: 'none' }} />}
+      {drawing && <div style={{ position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)', pointerEvents: 'none', background: 'rgba(0,0,0,.55)', borderRadius: 20, padding: '5px 13px', fontSize: 11, color: 'rgba(255,255,255,.85)' }}>拖拽框选要抠的区域，再点「抠图」</div>}
     </div>
   )
 }

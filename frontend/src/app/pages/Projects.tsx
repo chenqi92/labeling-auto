@@ -13,6 +13,7 @@ export default function Projects() {
   const images = useData((s) => s.images)
   const datasets = useData((s) => s.datasets)
   const uploading = useData((s) => s.uploading)
+  const imgQuery = useData((s) => s.imgQuery)
   const cur = useData(selProject)
   const setActiveProject = useData((s) => s.setActiveProject)
   const createProject = useData((s) => s.createProject)
@@ -33,7 +34,8 @@ export default function Projects() {
   const onDeleteProject = async (id: string, name: string) => {
     if (window.confirm(`删除项目「${name}」及其所有图片与标注？此操作不可撤销。`)) await deleteProject(id)
   }
-  const shown: ProjImage[] = images.filter((i) => (filter === 'all' ? true : filter === 'done' ? i.status === 'done' : i.status !== 'done'))
+  const q = imgQuery.trim().toLowerCase()
+  const shown: ProjImage[] = images.filter((i) => (filter === 'all' ? true : filter === 'done' ? i.status === 'done' : i.status !== 'done') && (!q || i.filename.toLowerCase().includes(q)))
   const counts = { all: images.length, todo: images.filter((i) => i.status !== 'done').length, done: images.filter((i) => i.status === 'done').length }
 
   const cardBg = ['linear-gradient(135deg,#16344f,#0f2735)', 'linear-gradient(135deg,#3a3f47,#22262d)', 'linear-gradient(135deg,#2a3a30,#16201a)']
@@ -73,7 +75,7 @@ export default function Projects() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
         <div style={{ fontSize: 15, fontWeight: 600 }}>图片库 · {cur?.name ?? '—'}</div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <input ref={fileRef} type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={(e) => { if (e.target.files?.length) uploadFiles(e.target.files); e.target.value = '' }} />
+          <input ref={fileRef} type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={async (e) => { const f = e.target.files; e.target.value = ''; if (f?.length) { try { await uploadFiles(f) } catch (err) { alert(`上传失败：${(err as Error).message}`) } } }} />
           <Btn label={uploading ? '上传中…' : '上传图片'} icon="download" onClick={() => fileRef.current?.click()} disabled={uploading || !activeId} />
         </div>
       </div>
