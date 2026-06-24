@@ -25,9 +25,12 @@ interface DataState {
   tasks: TaskDef[]
   engines: EngineDef[]
 
-  // VQA / OCR 结果（瞬态，按 imageId）
+  // VQA / OCR / 抠图 / 元素 结果（瞬态，按 imageId）
   inspections: Record<string, InspectResponse>
   recognitions: Record<string, RecognizeResponse>
+  mattes: Record<string, { png_b64: string; instances: { label: string; area_pct: number }[] }>
+  elementsMap: Record<string, { idx: number; name: string; cls: string; area_pct: number; thumb_b64: string }[]>
+  elementSel: Record<string, Record<number, boolean>>
 
   loadProjects: () => Promise<void>
   loadBootstrap: () => Promise<void>
@@ -57,6 +60,9 @@ interface DataState {
   setActiveClassId: (i: number | null) => void
   setInspection: (iid: string, r: InspectResponse) => void
   setRecognition: (iid: string, r: RecognizeResponse) => void
+  setMatte: (iid: string, r: { png_b64: string; instances: { label: string; area_pct: number }[] }) => void
+  setElements: (iid: string, els: { idx: number; name: string; cls: string; area_pct: number; thumb_b64: string }[]) => void
+  toggleElement: (iid: string, idx: number) => void
   refreshProjectCounts: () => Promise<void>
 }
 
@@ -77,6 +83,9 @@ export const useData = create<DataState>()((set, get) => ({
   engines: [],
   inspections: {},
   recognitions: {},
+  mattes: {},
+  elementsMap: {},
+  elementSel: {},
 
   loadProjects: async () => {
     const projects = await papi.listProjects()
@@ -251,6 +260,15 @@ export const useData = create<DataState>()((set, get) => ({
   setActiveClassId: (i) => set({ activeClassId: i }),
   setInspection: (iid, r) => set((s) => ({ inspections: { ...s.inspections, [iid]: r } })),
   setRecognition: (iid, r) => set((s) => ({ recognitions: { ...s.recognitions, [iid]: r } })),
+  setMatte: (iid, r) => set((s) => ({ mattes: { ...s.mattes, [iid]: r } })),
+  setElements: (iid, els) => set((s) => ({
+    elementsMap: { ...s.elementsMap, [iid]: els },
+    elementSel: { ...s.elementSel, [iid]: Object.fromEntries(els.map((e) => [e.idx, true])) },
+  })),
+  toggleElement: (iid, idx) => set((s) => {
+    const cur = s.elementSel[iid] ?? {}
+    return { elementSel: { ...s.elementSel, [iid]: { ...cur, [idx]: !cur[idx] } } }
+  }),
 
   refreshProjectCounts: async () => {
     try {

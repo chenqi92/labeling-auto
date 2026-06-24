@@ -20,6 +20,9 @@ interface AppState {
   // 外观
   theme: Theme
 
+  // 当前聚焦的任务（训练监控用）
+  focusJob: string | null
+
   // 顶栏弹层（同时只开一个，便于点击外部关闭）
   openMenu: MenuKey
 
@@ -34,6 +37,7 @@ interface AppState {
   toggleTheme: () => void
   setMenu: (m: MenuKey) => void
   closeMenus: () => void
+  setFocusJob: (id: string | null) => void
 }
 
 export const useApp = create<AppState>()(
@@ -45,6 +49,7 @@ export const useApp = create<AppState>()(
       view: 'workbench',
       capability: 'detect',
       theme: 'dark',
+      focusJob: null,
       openMenu: null,
 
       setSession: (token, user) => {
@@ -63,6 +68,7 @@ export const useApp = create<AppState>()(
       toggleTheme: () => set({ theme: get().theme === 'dark' ? 'light' : 'dark' }),
       setMenu: (m) => set((s) => ({ openMenu: s.openMenu === m ? null : m })),
       closeMenus: () => set({ openMenu: null }),
+      setFocusJob: (id) => set({ focusJob: id }),
     }),
     {
       name: 'vislab-app-v1',

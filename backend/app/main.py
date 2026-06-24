@@ -57,6 +57,18 @@ app.include_router(auth.router)
 # 项目 / 图片 / 类别 / 标注 / 数据集版本
 from app import projects  # noqa: E402
 app.include_router(projects.router)
+# 分割 / 抠图 / 元素拆解
+from app import segment  # noqa: E402
+app.include_router(segment.router)
+# 模型管理 / 显存 / 资源监控
+from app import registry  # noqa: E402
+app.include_router(registry.router)
+# 任务中心 / 批量 / 训练
+from app import jobs  # noqa: E402
+app.include_router(jobs.router)
+# 系统设置 / 项目导出
+from app import misc  # noqa: E402
+app.include_router(misc.router)
 
 # 支持的任务（给前端下拉用）
 TASKS = [

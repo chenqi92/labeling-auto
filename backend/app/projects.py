@@ -206,6 +206,29 @@ def get_annotations(iid: str) -> list[AnnotationOut]:
                           score=r["score"], source=r["source"]) for r in rows]
 
 
+def apply_detection_boxes(iid: str, boxes: list[dict]) -> int:
+    """服务端版「应用检测结果」：按 label 确保类别，替换 auto 标注、保留 manual。返回写入框数。
+
+    boxes 每项：{label, x1, y1, x2, y2, score?}。供批量推理 job 复用。
+    """
+    pid = image_project(iid)
+    if pid is None:
+        return 0
+    name_to_idx: dict[str, int] = {}
+    for b in boxes:
+        lb = (b.get("label") or "object").strip() or "object"
+        if lb not in name_to_idx:
+            name_to_idx[lb] = ensure_class(pid, lb)
+    existing = get_annotations(iid)
+    kept = [AnnotationIn(class_idx=a.class_idx, x1=a.x1, y1=a.y1, x2=a.x2, y2=a.y2, score=a.score, source=a.source)
+            for a in existing if a.source != "auto"]
+    new_auto = [AnnotationIn(class_idx=name_to_idx[(b.get("label") or "object").strip() or "object"],
+                            x1=b["x1"], y1=b["y1"], x2=b["x2"], y2=b["y2"], score=b.get("score"), source="auto")
+                for b in boxes]
+    set_annotations(iid, kept + new_auto)
+    return len(new_auto)
+
+
 def set_annotations(iid: str, anns: list[AnnotationIn]) -> list[AnnotationOut]:
     """整图替换标注（画布去抖保存的最简语义）。同时更新图片状态。"""
     if image_project(iid) is None:

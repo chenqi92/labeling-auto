@@ -4,9 +4,10 @@ import { useRef, useState } from 'react'
 import { useApp } from '../appStore'
 import { selActiveAnns, selActiveImage, useData } from '../dataStore'
 import { detect, inspect, recognizeText } from '../api'
+import { downloadBlob, elements as apiElements, exportElements, matte } from '../api2'
 import type { Capability, ProjImage } from '../types'
 import WbCanvas from './WbCanvas'
-import { Icon, StubPage } from './ui'
+import { Icon } from './ui'
 
 const CAP_LABEL: Record<Capability, string> = {
   detect: '目标检测 / 智能识别', vqa: '状态巡检 / 视觉问答', ocr: '文字提取 OCR', matting: '抠图 / 分割', element: '图片元素拆解',
@@ -15,16 +16,16 @@ const CAP_LABEL: Record<Capability, string> = {
 export default function Workbench() {
   const capability = useApp((s) => s.capability)
   const image = useData(selActiveImage)
-  if (capability === 'matting' || capability === 'element') {
-    return <StubPage title={CAP_LABEL[capability]} desc={capability === 'matting' ? '把目标从背景中抠出，输出透明背景' : '把一张图自动拆成若干独立元素图层'} />
-  }
   return (
     <div style={{ height: '100%', display: 'flex', minWidth: 0 }}>
       <ImageList />
       <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
         <Toolbar />
         <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
-          {image ? <WbCanvas readOnly={capability !== 'detect'} /> : <EmptyCanvas />}
+          {!image ? <EmptyCanvas />
+            : capability === 'matting' ? <MattingCanvas />
+            : capability === 'element' ? <ElementGallery />
+            : <WbCanvas readOnly={capability !== 'detect'} />}
         </div>
       </div>
       <ResultPanel />
@@ -99,6 +100,8 @@ function Toolbar() {
         {capability === 'detect' && <DetectControls />}
         {capability === 'vqa' && <VqaControls />}
         {capability === 'ocr' && <OcrControls />}
+        {capability === 'matting' && <MattingControls />}
+        {capability === 'element' && <ElementControls />}
       </div>
     </div>
   )
@@ -254,7 +257,198 @@ function ResultPanel() {
       {capability === 'detect' && <DetectResults />}
       {capability === 'vqa' && <VqaResults />}
       {capability === 'ocr' && <OcrResults />}
+      {capability === 'matting' && <MattingResults />}
+      {capability === 'element' && <ElementResults />}
     </div>
+  )
+}
+
+// ---------- 抠图 / 分割 ----------
+const mattingState = { mode: 'auto', classes: 'ship', feather: 2 }
+function MattingControls() {
+  const activeImageId = useData((s) => s.activeImageId)
+  const setBusy = useData((s) => s.setBusy)
+  const setMatte = useData((s) => s.setMatte)
+  const [, force] = useState(0)
+  const [running, setRunning] = useState(false)
+  const run = async () => {
+    if (!activeImageId) { alert('请先选择图片'); return }
+    setRunning(true); setBusy(activeImageId, true)
+    try {
+      const res = await matte({ image_id: activeImageId, mode: mattingState.mode, classes: mattingState.classes.split(/\s+/).filter(Boolean), feather: mattingState.feather })
+      setMatte(activeImageId, { png_b64: res.png_b64, instances: res.instances })
+    } catch (e) { alert(`抠图失败：${(e as Error).message}`) } finally { setRunning(false); setBusy(activeImageId, false) }
+  }
+  return (
+    <>
+      <div style={{ display: 'flex', gap: 4, background: 'var(--panel2)', borderRadius: 7, padding: 3 }}>
+        {([['auto', '一键去背'], ['text', '文字抠图'], ['box', '框选(grabCut)']] as const).map(([k, l]) => (
+          <button key={k} onClick={() => { mattingState.mode = k; force((n) => n + 1) }} style={segStyle(mattingState.mode === k)}>{l}</button>
+        ))}
+      </div>
+      {mattingState.mode === 'text' && (
+        <input defaultValue={mattingState.classes} onChange={(e) => { mattingState.classes = e.target.value }} placeholder="英文目标，如 ship boat" style={{ background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 8, padding: '7px 11px', color: 'var(--text)', fontSize: 12.5, outline: 'none', width: 180 }} />
+      )}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+        <span style={{ fontSize: 11.5, color: 'var(--text3)' }}>羽化</span>
+        <input type="range" min={0} max={10} defaultValue={mattingState.feather} onChange={(e) => { mattingState.feather = parseInt(e.target.value) }} style={{ width: 70, accentColor: 'var(--accent)' }} />
+      </div>
+      <div style={{ flex: 1 }} />
+      <button onClick={run} disabled={running} style={runBtnStyle(running)}>
+        {running ? <span style={{ width: 13, height: 13, border: '2px solid rgba(255,255,255,.3)', borderTopColor: 'currentColor', borderRadius: '50%', animation: 'spin .8s linear infinite' }} /> : <Icon name="matting" size={14} color="currentColor" />}
+        {running ? '抠图中…' : '抠图'}
+      </button>
+    </>
+  )
+}
+
+const CHECKER = 'linear-gradient(45deg,#555 25%,transparent 25%),linear-gradient(-45deg,#555 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#555 75%),linear-gradient(-45deg,transparent 75%,#555 75%)'
+function MattingCanvas() {
+  const activeImageId = useData((s) => s.activeImageId)
+  const image = useData(selActiveImage)
+  const mattes = useData((s) => s.mattes)
+  const res = activeImageId ? mattes[activeImageId] : undefined
+  return (
+    <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--canvas)', backgroundImage: res ? `${CHECKER}` : undefined, backgroundSize: '20px 20px', backgroundPosition: '0 0,0 10px,10px -10px,-10px 0' }}>
+      {res ? <img src={`data:image/png;base64,${res.png_b64}`} alt="matte" style={{ maxWidth: '82%', maxHeight: '88%', objectFit: 'contain' }} />
+        : image ? <img src={image.url} alt={image.filename} style={{ maxWidth: '78%', maxHeight: '85%', objectFit: 'contain', opacity: 0.85, borderRadius: 4 }} />
+        : null}
+    </div>
+  )
+}
+
+function MattingResults() {
+  const activeImageId = useData((s) => s.activeImageId)
+  const mattes = useData((s) => s.mattes)
+  const res = activeImageId ? mattes[activeImageId] : undefined
+  const download = () => {
+    if (!res) return
+    const a = document.createElement('a'); a.href = `data:image/png;base64,${res.png_b64}`; a.download = 'matte.png'; a.click()
+  }
+  return (
+    <>
+      <div style={{ padding: '13px 15px', borderBottom: '1px solid var(--border-soft)' }}>
+        <div style={{ fontSize: 13, fontWeight: 600 }}>抠图结果</div>
+        <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>透明 PNG · 棋盘格预览</div>
+      </div>
+      <div style={{ flex: 1, overflowY: 'auto', padding: 13 }}>
+        {!res && <div style={{ fontSize: 12.5, color: 'var(--text3)' }}>选模式后点「抠图」。一键去背用 rembg/YOLOE-seg，框选用 grabCut。</div>}
+        {res?.instances.map((it, i) => (
+          <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 11px', background: 'var(--panel2)', borderRadius: 8, marginBottom: 7 }}>
+            <span style={{ fontSize: 12.5, fontWeight: 500 }}>{it.label}</span>
+            <span style={{ fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--text3)' }}>{it.area_pct}%</span>
+          </div>
+        ))}
+      </div>
+      {res && <div style={{ borderTop: '1px solid var(--border-soft)', padding: '11px 13px' }}>
+        <button onClick={download} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, background: 'var(--accent)', color: '#04140f', border: 'none', borderRadius: 8, padding: 9, fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>
+          <Icon name="download" size={14} color="currentColor" />导出透明 PNG
+        </button>
+      </div>}
+    </>
+  )
+}
+
+// ---------- 元素拆解 ----------
+const elState = { classes: '', granularity: 'instance' }
+function ElementControls() {
+  const activeImageId = useData((s) => s.activeImageId)
+  const setBusy = useData((s) => s.setBusy)
+  const setElements = useData((s) => s.setElements)
+  const [, force] = useState(0)
+  const [running, setRunning] = useState(false)
+  const run = async () => {
+    if (!activeImageId) { alert('请先选择图片'); return }
+    setRunning(true); setBusy(activeImageId, true)
+    try {
+      const res = await apiElements({ image_id: activeImageId, classes: elState.classes.split(/\s+/).filter(Boolean), granularity: elState.granularity })
+      setElements(activeImageId, res.elements)
+    } catch (e) { alert(`拆解失败：${(e as Error).message}`) } finally { setRunning(false); setBusy(activeImageId, false) }
+  }
+  return (
+    <>
+      <span style={{ fontSize: 11.5, color: 'var(--text3)' }}>粒度</span>
+      <div style={{ display: 'flex', gap: 4, background: 'var(--panel2)', borderRadius: 7, padding: 3 }}>
+        {([['coarse', '粗·大块'], ['instance', '细·实例']] as const).map(([k, l]) => (
+          <button key={k} onClick={() => { elState.granularity = k; force((n) => n + 1) }} style={segStyle(elState.granularity === k)}>{l}</button>
+        ))}
+      </div>
+      <input defaultValue={elState.classes} onChange={(e) => { elState.classes = e.target.value }} placeholder="可选英文类名，留空用通用词表" style={{ flex: 1, background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 8, padding: '7px 11px', color: 'var(--text)', fontSize: 12.5, outline: 'none', minWidth: 160 }} />
+      <button onClick={run} disabled={running} style={runBtnStyle(running)}>
+        {running ? <span style={{ width: 13, height: 13, border: '2px solid rgba(255,255,255,.3)', borderTopColor: 'currentColor', borderRadius: '50%', animation: 'spin .8s linear infinite' }} /> : <Icon name="element" size={14} color="currentColor" />}
+        {running ? '拆解中…' : '拆解'}
+      </button>
+    </>
+  )
+}
+
+function ElementGallery() {
+  const activeImageId = useData((s) => s.activeImageId)
+  const elementsMap = useData((s) => s.elementsMap)
+  const elementSel = useData((s) => s.elementSel)
+  const toggleElement = useData((s) => s.toggleElement)
+  const els = activeImageId ? elementsMap[activeImageId] ?? [] : []
+  const sel = activeImageId ? elementSel[activeImageId] ?? {} : {}
+  if (els.length === 0) return <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text3)', fontSize: 13, background: 'var(--canvas)' }}>点「拆解」把图炸开成独立元素</div>
+  return (
+    <div style={{ height: '100%', overflowY: 'auto', background: 'var(--canvas)', padding: '22px 26px' }}>
+      <div style={{ fontSize: 14, fontWeight: 600, color: '#fff', marginBottom: 16 }}>拆解结果 · {els.filter((e) => sel[e.idx]).length} / {els.length} 个元素</div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(150px,1fr))', gap: 18 }}>
+        {els.map((el) => (
+          <div key={el.idx} onClick={() => activeImageId && toggleElement(activeImageId, el.idx)} style={{ position: 'relative', border: `2px solid ${sel[el.idx] ? 'var(--accent)' : 'transparent'}`, background: 'var(--panel2)', borderRadius: 11, padding: 8, cursor: 'pointer' }}>
+            <div style={{ width: '100%', aspectRatio: '1', borderRadius: 8, backgroundImage: `${CHECKER}`, backgroundSize: '14px 14px', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+              <img src={`data:image/png;base64,${el.thumb_b64}`} alt={el.name} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+            </div>
+            <div style={{ position: 'absolute', top: 13, right: 13, width: 19, height: 19, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', background: sel[el.idx] ? 'var(--accent)' : 'rgba(0,0,0,.5)', border: `1px solid ${sel[el.idx] ? 'var(--accent)' : 'rgba(255,255,255,.3)'}` }}>
+              {sel[el.idx] && <Icon name="check" size={11} color="#04140f" sw={3} />}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 }}>
+              <span style={{ fontSize: 12, fontWeight: 500, color: '#fff' }}>{el.name}</span>
+              <span style={{ fontSize: 10.5, fontFamily: 'var(--mono)', color: 'rgba(255,255,255,.5)' }}>{el.area_pct}%</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function ElementResults() {
+  const activeImageId = useData((s) => s.activeImageId)
+  const elementsMap = useData((s) => s.elementsMap)
+  const elementSel = useData((s) => s.elementSel)
+  const els = activeImageId ? elementsMap[activeImageId] ?? [] : []
+  const sel = activeImageId ? elementSel[activeImageId] ?? {} : {}
+  const exportZip = async () => {
+    if (!activeImageId) return
+    try {
+      const selected = els.filter((e) => sel[e.idx]).map((e) => e.idx)
+      downloadBlob(await exportElements({ image_id: activeImageId, classes: elState.classes.split(/\s+/).filter(Boolean), selected }), 'elements.zip')
+    } catch (e) { alert((e as Error).message) }
+  }
+  return (
+    <>
+      <div style={{ padding: '13px 15px', borderBottom: '1px solid var(--border-soft)' }}>
+        <div style={{ fontSize: 13, fontWeight: 600 }}>元素清单</div>
+        <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>已选 {els.filter((e) => sel[e.idx]).length} / {els.length}</div>
+      </div>
+      <div style={{ flex: 1, overflowY: 'auto', padding: 9 }}>
+        {els.length === 0 && <div style={{ fontSize: 12.5, color: 'var(--text3)', padding: 8 }}>拆解后这里列出每个元素，可勾选导出。</div>}
+        {els.map((el) => (
+          <div key={el.idx} onClick={() => activeImageId && useData.getState().toggleElement(activeImageId, el.idx)} style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '9px 10px', background: 'var(--panel2)', borderRadius: 9, marginBottom: 7, cursor: 'pointer' }}>
+            <div style={{ width: 18, height: 18, borderRadius: 6, flex: '0 0 18px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: sel[el.idx] ? 'var(--accent)' : 'rgba(0,0,0,.4)', border: `1px solid ${sel[el.idx] ? 'var(--accent)' : 'var(--border)'}` }}>{sel[el.idx] && <Icon name="check" size={11} color="#04140f" sw={3} />}</div>
+            <div style={{ width: 34, height: 34, borderRadius: 7, flex: '0 0 34px', backgroundImage: CHECKER, backgroundSize: '10px 10px', overflow: 'hidden' }}><img src={`data:image/png;base64,${el.thumb_b64}`} alt={el.name} style={{ width: '100%', height: '100%', objectFit: 'contain' }} /></div>
+            <div style={{ flex: 1 }}><div style={{ fontSize: 12.5, fontWeight: 500 }}>{el.name}</div><div style={{ fontSize: 10.5, fontFamily: 'var(--mono)', color: 'var(--text3)' }}>{el.cls}</div></div>
+            <span style={{ fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--text2)' }}>{el.area_pct}%</span>
+          </div>
+        ))}
+      </div>
+      {els.length > 0 && <div style={{ borderTop: '1px solid var(--border-soft)', padding: '11px 13px' }}>
+        <button onClick={exportZip} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, background: 'var(--accent)', color: '#04140f', border: 'none', borderRadius: 8, padding: 9, fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>
+          <Icon name="download" size={14} color="currentColor" />导出选中元素 zip
+        </button>
+      </div>}
+    </>
   )
 }
 

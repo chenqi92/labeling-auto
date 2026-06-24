@@ -141,6 +141,49 @@ SCHEMA: list[str] = [
         FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
     )
     """,
+    # —— 异步任务（批量推理 / 训练 / 导出）——
+    """
+    CREATE TABLE IF NOT EXISTS jobs (
+        id            TEXT PRIMARY KEY,
+        type          TEXT NOT NULL,              -- batch | training | export
+        capability    TEXT NOT NULL DEFAULT '',
+        project_id    TEXT NOT NULL DEFAULT '',
+        project_name  TEXT NOT NULL DEFAULT '',
+        status        TEXT NOT NULL DEFAULT 'queued', -- queued|running|success|failed|paused|stopped
+        progress      REAL NOT NULL DEFAULT 0,
+        total         INTEGER NOT NULL DEFAULT 0,
+        done          INTEGER NOT NULL DEFAULT 0,
+        metric        TEXT NOT NULL DEFAULT '',
+        detail        TEXT NOT NULL DEFAULT '',
+        eta           TEXT NOT NULL DEFAULT '',
+        who           TEXT NOT NULL DEFAULT '',
+        params        TEXT NOT NULL DEFAULT '{}',
+        result        TEXT NOT NULL DEFAULT '{}',
+        created_at    REAL NOT NULL,
+        started_at    REAL,
+        finished_at   REAL
+    )
+    """,
+    # —— 训练产物注册的「我的模型」——
+    """
+    CREATE TABLE IF NOT EXISTS trained_models (
+        id          TEXT PRIMARY KEY,
+        name        TEXT NOT NULL,
+        task        TEXT NOT NULL,
+        base        TEXT NOT NULL DEFAULT '',
+        weights     TEXT NOT NULL,               -- best.pt 路径
+        metric      TEXT NOT NULL DEFAULT '',
+        project_id  TEXT NOT NULL DEFAULT '',
+        created_at  REAL NOT NULL
+    )
+    """,
+    # —— 系统设置（键值）——
+    """
+    CREATE TABLE IF NOT EXISTS settings_kv (
+        k TEXT PRIMARY KEY,
+        v TEXT NOT NULL
+    )
+    """,
 ]
 
 
