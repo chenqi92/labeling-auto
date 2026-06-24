@@ -75,7 +75,7 @@ export default function Projects() {
         <div style={{ display: 'flex', gap: 8 }}>
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--panel2)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: 8, padding: '9px 15px', fontSize: 13, fontWeight: 600, cursor: uploading || !activeId ? 'not-allowed' : 'pointer', opacity: uploading || !activeId ? 0.5 : 1 }}>
             <Icon name="download" size={15} sw={1.8} />{uploading ? '上传中…' : '上传图片'}
-            <input type="file" accept="image/*" multiple disabled={uploading || !activeId} style={{ display: 'none' }} onChange={async (e) => { const f = e.target.files; e.target.value = ''; if (f?.length) { try { await uploadFiles(f) } catch (err) { alert(`上传失败：${(err as Error).message}`) } } }} />
+            <input type="file" accept="image/*" multiple disabled={uploading || !activeId} style={{ display: 'none' }} onChange={async (e) => { const f = Array.from(e.target.files ?? []); e.target.value = ''; if (f.length) { try { await uploadFiles(f) } catch (err) { alert(`上传失败：${(err as Error).message}`) } } }} />
           </label>
         </div>
       </div>

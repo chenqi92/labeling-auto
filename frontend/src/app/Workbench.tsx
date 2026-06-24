@@ -61,7 +61,7 @@ function ImageList() {
           <span style={{ fontSize: 12, fontWeight: 600 }}>素材 · {images.length}</span>
           <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--accent)', background: 'var(--accent-ghost)', borderRadius: 6, padding: '5px 8px', cursor: uploading ? 'wait' : 'pointer' }}>
             <Icon name="plus" size={12} color="currentColor" sw={2.2} />{uploading ? '上传中' : '上传'}
-            <input type="file" accept="image/*" multiple disabled={uploading} style={{ display: 'none' }} onChange={async (e) => { const f = e.target.files; e.target.value = ''; if (f?.length) { try { await uploadFiles(f) } catch (err) { alert(`上传失败：${(err as Error).message}`) } } }} />
+            <input type="file" accept="image/*" multiple disabled={uploading} style={{ display: 'none' }} onChange={async (e) => { const f = Array.from(e.target.files ?? []); e.target.value = ''; if (f.length) { try { await uploadFiles(f) } catch (err) { alert(`上传失败：${(err as Error).message}`) } } }} />
           </label>
         </div>
         <div style={{ display: 'flex', gap: 5 }}>
