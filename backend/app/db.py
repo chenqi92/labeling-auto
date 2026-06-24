@@ -198,6 +198,7 @@ def init_db() -> None:
                 conn.execute(ddl)
         _initialized = True
     # 播种放在建表之后，避免循环 import 放这里调用
-    from app import auth, projects
+    from app import auth, jobs, projects
     auth.seed_admin()
     projects.seed_default()
+    jobs.reconcile_orphans()  # 重启后把残留 running/queued 任务置 failed

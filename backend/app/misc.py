@@ -75,10 +75,16 @@ def _coco_zip(pid: str) -> bytes:
                 cid = cat_map.get(a.class_idx)
                 if cid is None:
                     continue
-                w, h = abs(a.x2 - a.x1), abs(a.y2 - a.y1)
+                x1, x2 = sorted((a.x1, a.x2))
+                y1, y2 = sorted((a.y1, a.y2))
+                x1 = max(0.0, min(x1, im.width)); x2 = max(0.0, min(x2, im.width))
+                y1 = max(0.0, min(y1, im.height)); y2 = max(0.0, min(y2, im.height))
+                w, h = x2 - x1, y2 - y1
+                if w <= 1e-6 or h <= 1e-6:
+                    continue  # 跳过退化/越界框，免得 pycocotools 校验失败
                 coco["annotations"].append({
                     "id": ann_id, "image_id": im.id, "category_id": cid,
-                    "bbox": [min(a.x1, a.x2), min(a.y1, a.y2), w, h], "area": w * h, "iscrowd": 0,
+                    "bbox": [x1, y1, w, h], "area": w * h, "iscrowd": 0,
                 })
                 ann_id += 1
         zf.writestr("annotations.json", json.dumps(coco, ensure_ascii=False, indent=2))
@@ -102,6 +108,8 @@ def _yolo_zip(pid: str) -> bytes:
 def export_project(pid: str, fmt: str = "yolo", _: UserOut = Depends(current_user)) -> Response:
     if next((p for p in P.list_projects() if p.id == pid), None) is None:
         raise HTTPException(404, detail="项目不存在")
+    if not any(im.boxes > 0 for im in P.list_images(pid)):
+        raise HTTPException(422, detail="项目没有已标注图片，无法导出数据集")
     if fmt == "coco":
         data, name = _coco_zip(pid), "coco.zip"
     else:

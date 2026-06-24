@@ -15,7 +15,7 @@ import json
 import zipfile
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.auth import UserOut, current_user
 from app.config import settings
@@ -96,21 +96,35 @@ def _cutout_b64(pil, mask, crop_bbox=None) -> str:
     if crop_bbox:
         x1, y1, x2, y2 = (int(v) for v in crop_bbox)
         out = out.crop((max(0, x1), max(0, y1), min(pil.width, x2), min(pil.height, y2)))
+    # 限制内联 base64 体积：长边超 2048 缩一下，避免响应/内存暴涨
+    if max(out.size) > 2048:
+        out.thumbnail((2048, 2048))
     buf = io.BytesIO()
     out.save(buf, "PNG")
     return base64.b64encode(buf.getvalue()).decode()
 
 
 def _grabcut(pil, box, iters: int = 5):
-    """OpenCV grabCut：用矩形框做前景提取，返回 bool 掩膜。"""
+    """OpenCV grabCut：用矩形框做前景提取，返回 bool 掩膜。框先夹到图像内并拒绝退化框。"""
     import cv2
     import numpy as np
     img = cv2.cvtColor(np.array(pil.convert("RGB")), cv2.COLOR_RGB2BGR)
-    mask = np.zeros(img.shape[:2], np.uint8)
-    bgd, fgd = np.zeros((1, 65), np.float64), np.zeros((1, 65), np.float64)
+    h_img, w_img = img.shape[:2]
     x1, y1, x2, y2 = (int(v) for v in box)
-    rect = (max(0, x1), max(0, y1), max(1, x2 - x1), max(1, y2 - y1))
-    cv2.grabCut(img, mask, rect, bgd, fgd, iters, cv2.GC_INIT_WITH_RECT)
+    if x2 < x1:
+        x1, x2 = x2, x1
+    if y2 < y1:
+        y1, y2 = y2, y1
+    x = min(max(0, x1), w_img - 1)
+    y = min(max(0, y1), h_img - 1)
+    x2c = min(max(x + 1, x2), w_img)
+    y2c = min(max(y + 1, y2), h_img)
+    w, h = x2c - x, y2c - y
+    if w <= 0 or h <= 0:
+        raise HTTPException(400, detail="框选区域无效")
+    mask = np.zeros((h_img, w_img), np.uint8)
+    bgd, fgd = np.zeros((1, 65), np.float64), np.zeros((1, 65), np.float64)
+    cv2.grabCut(img, mask, (x, y, w, h), bgd, fgd, iters, cv2.GC_INIT_WITH_RECT)
     return (mask == cv2.GC_FGD) | (mask == cv2.GC_PR_FGD)
 
 
@@ -157,7 +171,7 @@ class MatteRequest(BaseModel):
     mode: str = "auto"            # auto(去背) | text | box
     classes: list[str] = []
     box: list[float] | None = None
-    feather: int = 0
+    feather: int = Field(0, ge=0, le=100)
     variant: str = DEFAULT_SEG
 
 
@@ -207,7 +221,10 @@ def _feather(mask, px: int):
     if px <= 0:
         return mask
     import cv2
-    import numpy as np
+    # 夹住羽化半径：不超过 64，也不超过图像短边的一半，避免巨核卡死/报错
+    px = min(int(px), 64, (min(mask.shape[:2]) - 1) // 2)
+    if px <= 0:
+        return mask
     m = (mask.astype("uint8")) * 255
     k = max(1, px) * 2 + 1
     m = cv2.GaussianBlur(m, (k, k), 0)

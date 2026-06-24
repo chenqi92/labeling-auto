@@ -14,6 +14,8 @@ import json
 import os
 import shutil
 import subprocess
+import threading
+import time
 import urllib.request
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -42,22 +44,34 @@ CATALOG = [
 ]
 
 
+_ollama_cache: dict = {"t": -1e9, "val": (set(), set())}
+_ollama_lock = threading.Lock()
+_OLLAMA_TTL = 3.0  # 看板轮询复用同一次探测，别每个请求都打 Ollama
+
+
 def _ollama_models() -> tuple[set[str], set[str]]:
-    """返回 (已下载模型名, 已加载显存模型名)。失败则空集。"""
+    """返回 (已下载模型名, 已加载显存模型名)。带短 TTL 缓存，失败则空集。"""
+    now = time.time()
+    with _ollama_lock:
+        if now - _ollama_cache["t"] < _OLLAMA_TTL:
+            return _ollama_cache["val"]
     base = settings.ollama_url.rstrip("/")
     downloaded, loaded = set(), set()
     try:
-        with urllib.request.urlopen(f"{base}/api/tags", timeout=4) as r:
+        with urllib.request.urlopen(f"{base}/api/tags", timeout=1.5) as r:
             for m in json.loads(r.read().decode()).get("models", []):
                 downloaded.add(m.get("name") or m.get("model") or "")
     except Exception:
         pass
     try:
-        with urllib.request.urlopen(f"{base}/api/ps", timeout=4) as r:
+        with urllib.request.urlopen(f"{base}/api/ps", timeout=1.5) as r:
             for m in json.loads(r.read().decode()).get("models", []):
                 loaded.add(m.get("name") or m.get("model") or "")
     except Exception:
         pass
+    with _ollama_lock:
+        _ollama_cache["t"] = now
+        _ollama_cache["val"] = (downloaded, loaded)
     return downloaded, loaded
 
 

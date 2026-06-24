@@ -352,6 +352,8 @@ function MattingResults() {
 
 // ---------- 元素拆解 ----------
 const elState = { classes: '', granularity: 'instance' }
+// 记录每张图拆解时用的类名，导出时复用同一组，保证后端重算出的实例顺序与已选一致
+const elClassesByImage: Record<string, string[]> = {}
 function ElementControls() {
   const activeImageId = useData((s) => s.activeImageId)
   const setBusy = useData((s) => s.setBusy)
@@ -362,7 +364,9 @@ function ElementControls() {
     if (!activeImageId) { alert('请先选择图片'); return }
     setRunning(true); setBusy(activeImageId, true)
     try {
-      const res = await apiElements({ image_id: activeImageId, classes: elState.classes.split(/\s+/).filter(Boolean), granularity: elState.granularity })
+      const cls = elState.classes.split(/\s+/).filter(Boolean)
+      elClassesByImage[activeImageId] = cls
+      const res = await apiElements({ image_id: activeImageId, classes: cls, granularity: elState.granularity })
       setElements(activeImageId, res.elements)
     } catch (e) { alert(`拆解失败：${(e as Error).message}`) } finally { setRunning(false); setBusy(activeImageId, false) }
   }
@@ -424,7 +428,7 @@ function ElementResults() {
     if (!activeImageId) return
     try {
       const selected = els.filter((e) => sel[e.idx]).map((e) => e.idx)
-      downloadBlob(await exportElements({ image_id: activeImageId, classes: elState.classes.split(/\s+/).filter(Boolean), selected }), 'elements.zip')
+      downloadBlob(await exportElements({ image_id: activeImageId, classes: elClassesByImage[activeImageId] ?? [], selected }), 'elements.zip')
     } catch (e) { alert((e as Error).message) }
   }
   return (

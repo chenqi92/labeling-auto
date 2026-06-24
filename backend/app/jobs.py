@@ -85,6 +85,27 @@ def _get_row(jid: str):
         return conn.execute("SELECT * FROM jobs WHERE id=?", (jid,)).fetchone()
 
 
+def reconcile_orphans() -> None:
+    """启动时把上次残留的 running/queued 行置为 failed —— 进程重启后不存在 worker，否则成僵尸。"""
+    with tx() as conn:
+        conn.execute(
+            "UPDATE jobs SET status='failed', detail='中断（服务重启）', finished_at=? WHERE status IN ('running','queued')",
+            (time.time(),),
+        )
+
+
+def _prune_live(keep: int = 300) -> None:
+    """限制内存里日志缓冲数量：超阈值时删掉最早的已结束任务（保留运行中的）。"""
+    if len(_live) <= keep:
+        return
+    for jid in list(_live.keys()):
+        if len(_live) <= keep:
+            break
+        row = _get_row(jid)
+        if row is None or row["status"] in ("success", "failed", "stopped"):
+            _live.pop(jid, None)
+
+
 def _update(jid: str, **fields) -> None:
     if not fields:
         return
@@ -170,7 +191,9 @@ def _materialize_yolo(pid: str, out_dir: str, train_ratio: float = 0.8) -> tuple
             lines.append(f"{ci} {xc:.6f} {yc:.6f} {w:.6f} {h:.6f}")
         with open(os.path.join(out_dir, f"labels/{split}/{im.id}.txt"), "w") as f:
             f.write("\n".join(lines))
-    yaml = f"path: {out_dir}\ntrain: images/train\nval: images/val\nnc: {len(names)}\nnames: {names}\n"
+    # 样本太少没切出验证集时，让 val 指向 train，避免 ultralytics 扫到空 val 目录直接报错
+    val_split = "images/train" if n_val == 0 else "images/val"
+    yaml = f"path: {out_dir}\ntrain: images/train\nval: {val_split}\nnc: {len(names)}\nnames: {names}\n"
     with open(os.path.join(out_dir, "data.yaml"), "w", encoding="utf-8") as f:
         f.write(yaml)
     return len(names), len(labeled)
@@ -301,6 +324,7 @@ def _create(jtype: str, capability: str, pid: str, params: dict, who: str) -> Jo
             " VALUES(?,?,?,?,?, 'queued', ?,?,?)",
             (jid, jtype, capability, pid, pname, who, json.dumps(params), time.time()),
         )
+    _prune_live()
     _live[jid] = {"logs": [], "cancel": threading.Event()}
     _ensure_worker()
     _q.put(jid)

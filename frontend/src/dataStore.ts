@@ -220,20 +220,21 @@ export const useData = create<DataState>()((set, get) => ({
   },
 
   saveAnnotations: async (iid, list) => {
-    // 乐观更新：先本地落地，并清掉旧选中（数组被整替，序号会错位）
+    // 乐观更新：先本地落地。仅当数量变化（增/删会移位序号）时清选中；
+    // 原地 move/resize/改类数量不变，保留选中，避免拖完就掉选。
     set((s) => ({
       anns: { ...s.anns, [iid]: list.map((a) => ({ ...a })) },
       images: s.images.map((i) => (i.id === iid ? { ...i, boxes: list.length, status: list.length ? 'done' : 'todo' } : i)),
-      selectedIdx: iid === s.activeImageId ? null : s.selectedIdx,
+      selectedIdx: iid === s.activeImageId && (s.anns[iid]?.length ?? 0) !== list.length ? null : s.selectedIdx,
     }))
-    // 串行化该图的 PUT，并在服务端返回后回填带 id 的结果
+    // 串行化该图的 PUT；仅最新一次保存回填服务端结果，避免旧结果盖掉更新的乐观状态
     const prev = saveChains[iid] ?? Promise.resolve()
-    const next = prev.then(async () => {
+    const chain: Promise<void> = prev.then(async () => {
       const saved = await papi.setAnnotations(iid, list)
-      set((s) => ({ anns: { ...s.anns, [iid]: saved } }))
+      if (saveChains[iid] === chain) set((s) => ({ anns: { ...s.anns, [iid]: saved } }))
     }).catch(() => undefined)
-    saveChains[iid] = next
-    await next
+    saveChains[iid] = chain
+    await chain
   },
 
   applyDetections: async (iid, boxes) => {
