@@ -51,7 +51,6 @@ function ImageList() {
   const uploadFiles = useData((s) => s.uploadFiles)
   const imgQuery = useData((s) => s.imgQuery)
   const [filter, setFilter] = useState<'all' | 'todo' | 'done'>('all')
-  const fileRef = useRef<HTMLInputElement>(null)
   const q = imgQuery.trim().toLowerCase()
   const shown = images.filter((i) => (filter === 'all' ? true : filter === 'done' ? i.status === 'done' : i.status !== 'done') && (!q || i.filename.toLowerCase().includes(q)))
 
@@ -60,10 +59,10 @@ function ImageList() {
       <div style={{ padding: '12px 12px 9px', borderBottom: '1px solid var(--border-soft)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 9 }}>
           <span style={{ fontSize: 12, fontWeight: 600 }}>素材 · {images.length}</span>
-          <input ref={fileRef} type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={async (e) => { const f = e.target.files; e.target.value = ''; if (f?.length) { try { await uploadFiles(f) } catch (err) { alert(`上传失败：${(err as Error).message}`) } } }} />
-          <button onClick={() => fileRef.current?.click()} disabled={uploading} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--accent)', background: 'var(--accent-ghost)', border: 'none', borderRadius: 6, padding: '5px 8px', cursor: 'pointer' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--accent)', background: 'var(--accent-ghost)', borderRadius: 6, padding: '5px 8px', cursor: uploading ? 'wait' : 'pointer' }}>
             <Icon name="plus" size={12} color="currentColor" sw={2.2} />{uploading ? '上传中' : '上传'}
-          </button>
+            <input type="file" accept="image/*" multiple disabled={uploading} style={{ display: 'none' }} onChange={async (e) => { const f = e.target.files; e.target.value = ''; if (f?.length) { try { await uploadFiles(f) } catch (err) { alert(`上传失败：${(err as Error).message}`) } } }} />
+          </label>
         </div>
         <div style={{ display: 'flex', gap: 5 }}>
           {([['all', '全部'], ['todo', '未处理'], ['done', '已处理']] as const).map(([k, l]) => (

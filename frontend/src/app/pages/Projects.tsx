@@ -1,5 +1,5 @@
 /** 项目与数据集（真实）：项目卡片 · 图片库(上传/删除/筛选) · 数据集版本快照。 */
-import { useRef, useState } from 'react'
+import { useState } from 'react'
 import { useApp } from '../../appStore'
 import { selProject, useData } from '../../dataStore'
 import type { ProjImage } from '../../types'
@@ -25,8 +25,6 @@ export default function Projects() {
   const goView = useApp((s) => s.goView)
 
   const [filter, setFilter] = useState<Filter>('all')
-  const fileRef = useRef<HTMLInputElement>(null)
-
   const newProject = async () => {
     const name = window.prompt('新项目名称：', '')
     if (name) await createProject(name)
@@ -75,8 +73,10 @@ export default function Projects() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
         <div style={{ fontSize: 15, fontWeight: 600 }}>图片库 · {cur?.name ?? '—'}</div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <input ref={fileRef} type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={async (e) => { const f = e.target.files; e.target.value = ''; if (f?.length) { try { await uploadFiles(f) } catch (err) { alert(`上传失败：${(err as Error).message}`) } } }} />
-          <Btn label={uploading ? '上传中…' : '上传图片'} icon="download" onClick={() => fileRef.current?.click()} disabled={uploading || !activeId} />
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--panel2)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: 8, padding: '9px 15px', fontSize: 13, fontWeight: 600, cursor: uploading || !activeId ? 'not-allowed' : 'pointer', opacity: uploading || !activeId ? 0.5 : 1 }}>
+            <Icon name="download" size={15} sw={1.8} />{uploading ? '上传中…' : '上传图片'}
+            <input type="file" accept="image/*" multiple disabled={uploading || !activeId} style={{ display: 'none' }} onChange={async (e) => { const f = e.target.files; e.target.value = ''; if (f?.length) { try { await uploadFiles(f) } catch (err) { alert(`上传失败：${(err as Error).message}`) } } }} />
+          </label>
         </div>
       </div>
       <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>

@@ -164,7 +164,8 @@ export const useData = create<DataState>()((set, get) => ({
 
   uploadFiles: async (files) => {
     const pid = get().activeProjectId
-    if (!pid || files.length === 0) return
+    if (files.length === 0) return
+    if (!pid) throw new Error('请先选择或创建一个项目')
     set({ uploading: true })
     try {
       const added = await papi.uploadImages(pid, files)
