@@ -58,7 +58,9 @@ def _instances(pil, classes: list[str], conf: float, variant: str):
     model = _ensure_seg(variant)
     names = classes or AUTO_VOCAB
     model.set_classes(names, model.get_text_pe(names))
-    res = model.predict(pil, conf=conf, verbose=False)[0]
+    # retina_masks=True 让 masks.data 已缩放回原图尺寸（去掉 letterbox 填充），
+    # 否则直接 resize 到 (W,H) 会在非正方形图上拉伸错位。
+    res = model.predict(pil, conf=conf, retina_masks=True, verbose=False)[0]
     out = []
     if res.masks is None:
         return out

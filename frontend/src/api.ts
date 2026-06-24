@@ -1,3 +1,5 @@
+/** 旧版/核心推理 API。统一走 lib/http（自动带 Bearer 令牌）。 */
+import { apiJson, apiRaw } from './lib/http'
 import type {
   DetectResponse,
   EngineDef,
@@ -10,53 +12,26 @@ import type {
   TaskKey,
 } from './types'
 
-async function jsonOrThrow<T>(res: Response): Promise<T> {
-  if (!res.ok) {
-    let detail = res.statusText
-    try {
-      const body = await res.json()
-      detail = body.detail || detail
-    } catch {
-      /* ignore */
-    }
-    throw new Error(detail)
-  }
-  return res.json() as Promise<T>
-}
-
 export async function uploadImages(files: FileList | File[]): Promise<ImageItem[]> {
   const form = new FormData()
   Array.from(files).forEach((f) => form.append('files', f))
-  const res = await fetch('/api/images', { method: 'POST', body: form })
-  return jsonOrThrow<ImageItem[]>(res)
+  return apiJson<ImageItem[]>('/api/images', { method: 'POST', body: form })
 }
 
-export async function listImages(): Promise<ImageItem[]> {
-  const res = await fetch('/api/images')
-  return jsonOrThrow<ImageItem[]>(res)
-}
+export const listImages = () => apiJson<ImageItem[]>('/api/images')
 
 export async function getTasks(): Promise<TaskDef[]> {
-  const res = await fetch('/api/tasks')
-  const body = await jsonOrThrow<{ tasks: TaskDef[] }>(res)
+  const body = await apiJson<{ tasks: TaskDef[] }>('/api/tasks')
   return body.tasks
 }
 
 export async function getEngines(): Promise<EngineDef[]> {
-  const res = await fetch('/api/engines')
-  const body = await jsonOrThrow<{ engines: EngineDef[] }>(res)
+  const body = await apiJson<{ engines: EngineDef[] }>('/api/engines')
   return body.engines
 }
 
-export async function getModelStatus(): Promise<ModelStatus> {
-  const res = await fetch('/api/model/status')
-  return jsonOrThrow<ModelStatus>(res)
-}
-
-export async function loadModel(): Promise<ModelStatus> {
-  const res = await fetch('/api/model/load', { method: 'POST' })
-  return jsonOrThrow<ModelStatus>(res)
-}
+export const getModelStatus = () => apiJson<ModelStatus>('/api/model/status')
+export const loadModel = () => apiJson<ModelStatus>('/api/model/load', { method: 'POST' })
 
 export interface DetectParams {
   image_id: string
@@ -67,43 +42,21 @@ export interface DetectParams {
   max_new_tokens?: number | null
 }
 
-export async function detect(params: DetectParams): Promise<DetectResponse> {
-  const res = await fetch('/api/detect', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(params),
-  })
-  return jsonOrThrow<DetectResponse>(res)
-}
+export const detect = (params: DetectParams) =>
+  apiJson<DetectResponse>('/api/detect', { method: 'POST', body: JSON.stringify(params) })
 
-export async function inspect(params: { image_id: string; query: string }): Promise<InspectResponse> {
-  const res = await fetch('/api/inspect', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(params),
-  })
-  return jsonOrThrow<InspectResponse>(res)
-}
+export const inspect = (params: { image_id: string; query: string }) =>
+  apiJson<InspectResponse>('/api/inspect', { method: 'POST', body: JSON.stringify(params) })
 
-export async function inspectHealth(): Promise<InspectHealth> {
-  const res = await fetch('/api/inspect/health')
-  return jsonOrThrow<InspectHealth>(res)
-}
+export const inspectHealth = () => apiJson<InspectHealth>('/api/inspect/health')
 
-export async function recognizeText(params: { image_id: string }): Promise<RecognizeResponse> {
-  const res = await fetch('/api/recognize', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(params),
-  })
-  return jsonOrThrow<RecognizeResponse>(res)
-}
+export const recognizeText = (params: { image_id: string }) =>
+  apiJson<RecognizeResponse>('/api/recognize', { method: 'POST', body: JSON.stringify(params) })
 
 export interface ExportItem {
   image_id: string
   annotations: { class_id: number; x1: number; y1: number; x2: number; y2: number }[]
 }
-
 export interface ExportParams {
   dataset_name: string
   classes: string[]
@@ -112,19 +65,6 @@ export interface ExportParams {
 }
 
 export async function exportYolo(params: ExportParams): Promise<Blob> {
-  const res = await fetch('/api/export/yolo', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(params),
-  })
-  if (!res.ok) {
-    let detail = res.statusText
-    try {
-      detail = (await res.json()).detail || detail
-    } catch {
-      /* ignore */
-    }
-    throw new Error(detail)
-  }
+  const res = await apiRaw('/api/export/yolo', { method: 'POST', body: JSON.stringify(params) })
   return res.blob()
 }

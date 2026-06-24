@@ -7,6 +7,9 @@ import type { Ann, Cls, DatasetVersion, EngineDef, InspectResponse, ModelStatus,
 
 const ACTIVE_KEY = 'vislab-active-project'
 
+// 每张图一条保存链：PUT 串行化，后一次保存等前一次完成，避免快速编辑丢失。
+const saveChains: Record<string, Promise<void>> = {}
+
 interface DataState {
   projects: ProjectInfo[]
   activeProjectId: string | null
@@ -117,6 +120,7 @@ export const useData = create<DataState>()((set, get) => ({
       papi.listClasses(pid),
       papi.listDatasets(pid),
     ])
+    if (get().activeProjectId !== pid) return // 期间切了项目，丢弃过期结果
     set({ images, classes, datasets })
     const first = images[0]?.id ?? null
     if (first) await get().setActiveImage(first)
@@ -169,8 +173,9 @@ export const useData = create<DataState>()((set, get) => ({
       const images = s.images.filter((i) => i.id !== iid)
       const anns = { ...s.anns }
       delete anns[iid]
-      const activeImageId = s.activeImageId === iid ? images[0]?.id ?? null : s.activeImageId
-      return { images, anns, activeImageId }
+      const wasActive = s.activeImageId === iid
+      const activeImageId = wasActive ? images[0]?.id ?? null : s.activeImageId
+      return { images, anns, activeImageId, selectedIdx: wasActive ? null : s.selectedIdx }
     })
     await get().refreshProjectCounts()
   },
@@ -215,26 +220,28 @@ export const useData = create<DataState>()((set, get) => ({
   },
 
   saveAnnotations: async (iid, list) => {
-    const saved = await papi.setAnnotations(iid, list)
+    // 乐观更新：先本地落地，并清掉旧选中（数组被整替，序号会错位）
     set((s) => ({
-      anns: { ...s.anns, [iid]: saved },
-      images: s.images.map((i) => (i.id === iid ? { ...i, boxes: saved.length, status: saved.length ? 'done' : 'todo' } : i)),
+      anns: { ...s.anns, [iid]: list.map((a) => ({ ...a })) },
+      images: s.images.map((i) => (i.id === iid ? { ...i, boxes: list.length, status: list.length ? 'done' : 'todo' } : i)),
+      selectedIdx: iid === s.activeImageId ? null : s.selectedIdx,
     }))
+    // 串行化该图的 PUT，并在服务端返回后回填带 id 的结果
+    const prev = saveChains[iid] ?? Promise.resolve()
+    const next = prev.then(async () => {
+      const saved = await papi.setAnnotations(iid, list)
+      set((s) => ({ anns: { ...s.anns, [iid]: saved } }))
+    }).catch(() => undefined)
+    saveChains[iid] = next
+    await next
   },
 
   applyDetections: async (iid, boxes) => {
-    const pid = get().activeProjectId
-    if (!pid) return
-    // 确保每个 label 有类别
-    let classes = get().classes
+    if (!get().activeProjectId) return
+    // 确保每个 label 有类别：走 store.addClass（按名去重并函数式合并，避免快照覆盖）
     const labels = Array.from(new Set(boxes.map((b) => b.label || 'object')))
-    for (const lb of labels) {
-      if (!classes.find((c) => c.name === lb)) {
-        const c = await papi.addClass(pid, lb)
-        classes = [...classes, c]
-      }
-    }
-    set({ classes })
+    for (const lb of labels) await get().addClass(lb)
+    const classes = get().classes // 等 await 后重读最新
     const nameToIdx = new Map(classes.map((c) => [c.name, c.id]))
     const existing = get().anns[iid] ?? (await get().loadAnnotations(iid))
     const keptManual = existing.filter((a) => a.source !== 'auto')

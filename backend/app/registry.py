@@ -216,9 +216,20 @@ def api_load(req: ModelAction, _: UserOut = Depends(require_admin)) -> dict:
         raise HTTPException(404, detail="未知模型")
     try:
         if it["kind"] == "la":
+            from app.engine import vqa
             from app.engine.manager import manager
+            # 互斥：加载 LA 前先卸 VQA 释放显存（与 /api/detect 一致，避免 16GB 卡 OOM）
+            if settings.vqa_exclusive and it.get("mutex"):
+                try:
+                    vqa.unload()
+                except Exception:
+                    pass
             manager.ensure_loaded()
         elif it["kind"] == "ollama":
+            from app.engine.manager import manager
+            # 互斥：预热 VLM 前先卸 LA 释放显存（与 /api/inspect 一致）
+            if settings.vqa_exclusive and it.get("mutex"):
+                manager.unload()
             base = settings.ollama_url.rstrip("/")
             body = json.dumps({"model": req.name, "keep_alive": settings.vqa_keep_alive}).encode()
             urllib.request.urlopen(urllib.request.Request(f"{base}/api/generate", data=body, headers={"Content-Type": "application/json"}), timeout=settings.vqa_timeout)
@@ -246,8 +257,21 @@ def api_unload(req: ModelAction, _: UserOut = Depends(require_admin)) -> dict:
         elif it["kind"] == "yoloe":
             import gc
             from app import segment
+            from app.engine import yoloe as yo
             segment._seg_models.clear()
+            # 同时清检测路径的缓存（/api/detect 用的 yoloe._models），否则卸载形同虚设
+            for m in getattr(yo, "_models", {}).values():
+                try:
+                    m._model = None
+                except Exception:
+                    pass
+            getattr(yo, "_models", {}).clear()
             gc.collect()
+            try:
+                import torch
+                torch.cuda.empty_cache()
+            except Exception:
+                pass
     except Exception as e:  # noqa: BLE001
         raise HTTPException(500, detail=f"卸载失败：{e}")
     return {"ok": True}

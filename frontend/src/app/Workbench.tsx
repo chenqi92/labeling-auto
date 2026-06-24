@@ -137,7 +137,8 @@ function DetectControls() {
         setBusy(id, true)
         try {
           const res = await detect({ image_id: id, query: q, task: 'detection', engine, mode })
-          await applyDetections(id, res.boxes)
+          // 阈值过滤：无分数(LA)恒保留；YOLOE 有分数则按阈值过滤
+          await applyDetections(id, res.boxes.filter((b) => (b.score ?? 1) >= thresh))
         } finally { setBusy(id, false) }
       }
     } catch (e) { alert(`检测失败：${(e as Error).message}`) } finally { setRunning(false) }

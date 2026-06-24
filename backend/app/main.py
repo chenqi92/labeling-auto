@@ -6,12 +6,13 @@ import os
 import re
 import time
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 
 from app import auth, db
+from app.auth import UserOut, current_user, require_admin, require_editor
 from app.config import settings
 from app.engine.base import DetectParams
 from app.engine.manager import manager
@@ -114,7 +115,7 @@ def list_engines() -> dict:
 
 
 @app.get("/api/model/status", response_model=ModelStatus)
-def model_status() -> ModelStatus:
+def model_status(_: UserOut = Depends(current_user)) -> ModelStatus:
     s = manager.status()
     return ModelStatus(
         state=s.get("state", "unloaded"),
@@ -127,13 +128,13 @@ def model_status() -> ModelStatus:
 
 
 @app.post("/api/model/load", response_model=ModelStatus)
-def model_load() -> ModelStatus:
+def model_load(user: UserOut = Depends(require_admin)) -> ModelStatus:
     manager.load_async()
-    return model_status()
+    return model_status(user)
 
 
 @app.post("/api/images", response_model=list[ImageMeta])
-async def upload_images(files: list[UploadFile] = File(...)) -> list[ImageMeta]:
+async def upload_images(files: list[UploadFile] = File(...), _: UserOut = Depends(require_editor)) -> list[ImageMeta]:
     out: list[ImageMeta] = []
     for f in files:
         data = await f.read()
@@ -159,7 +160,7 @@ async def upload_images(files: list[UploadFile] = File(...)) -> list[ImageMeta]:
 
 
 @app.get("/api/images", response_model=list[ImageMeta])
-def list_images() -> list[ImageMeta]:
+def list_images(_: UserOut = Depends(current_user)) -> list[ImageMeta]:
     """列出当前后端已存的所有图片（前端刷新后据此恢复图片列表）。"""
     return [
         ImageMeta(
@@ -174,6 +175,7 @@ def list_images() -> list[ImageMeta]:
     ]
 
 
+# 故意保持公开：前端 <img src> 由浏览器加载，不会带 Authorization 头；图片 id 是 UUID，作为能力令牌。
 @app.get("/api/images/{image_id}/file")
 def get_image(image_id: str) -> Response:
     stored = store.get(image_id)
@@ -193,7 +195,7 @@ def _params(req: DetectRequest) -> DetectParams:
 
 
 @app.post("/api/detect", response_model=DetectResponse)
-def detect(req: DetectRequest) -> DetectResponse:
+def detect(req: DetectRequest, _: UserOut = Depends(require_editor)) -> DetectResponse:
     stored = store.get(req.image_id)
     if stored is None:
         raise HTTPException(status_code=404, detail="图片不存在")
@@ -326,7 +328,7 @@ def inspect_health() -> dict:
 
 
 @app.post("/api/inspect", response_model=InspectResponse)
-def inspect(req: InspectRequest) -> InspectResponse:
+def inspect(req: InspectRequest, _: UserOut = Depends(require_editor)) -> InspectResponse:
     stored = store.get(req.image_id)
     if stored is None:
         raise HTTPException(status_code=404, detail="图片不存在")
@@ -359,7 +361,7 @@ def inspect(req: InspectRequest) -> InspectResponse:
 
 
 @app.post("/api/recognize", response_model=RecognizeResponse)
-def recognize(req: RecognizeRequest) -> RecognizeResponse:
+def recognize(req: RecognizeRequest, _: UserOut = Depends(require_editor)) -> RecognizeResponse:
     stored = store.get(req.image_id)
     if stored is None:
         raise HTTPException(status_code=404, detail="图片不存在")
@@ -382,7 +384,7 @@ def recognize(req: RecognizeRequest) -> RecognizeResponse:
 
 
 @app.post("/api/export/yolo")
-def export_yolo(req: ExportRequest) -> Response:
+def export_yolo(req: ExportRequest, _: UserOut = Depends(require_editor)) -> Response:
     if not req.classes:
         raise HTTPException(status_code=400, detail="缺少类别列表")
     if not req.items:

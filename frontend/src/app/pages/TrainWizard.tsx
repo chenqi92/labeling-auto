@@ -7,12 +7,12 @@ import { Btn, Card, Icon, Page, PageHead } from '../ui'
 
 const STEPS = ['任务类型', '基础模型', '数据集', '超参', '启动']
 const TYPES: [string, string, string][] = [
-  ['detect', '目标检测', '框出目标位置 · YOLOE / LocateAnything'],
-  ['seg', '实例分割', '像素级 mask · YOLOE-seg'],
+  ['detect', '目标检测', '框出目标位置 · 在你的标注上微调'],
 ]
 const BASES: [string, string][] = [
-  ['yoloe-26l-seg.pt', '快 · 开放词汇 · 通用场景'],
-  ['yoloe-26s-seg.pt', '极快 · 轻量 · 边缘部署'],
+  ['yolo11s.pt', '小 · 快 · 通用检测基座（推荐）'],
+  ['yolo11m.pt', '中 · 精度更高 · 显存占用更大'],
+  ['yolo11n.pt', '极小 · 最快 · 边缘部署'],
 ]
 
 export default function TrainWizard() {
@@ -21,7 +21,7 @@ export default function TrainWizard() {
   const project = useData(selProject)
   const [step, setStep] = useState(1)
   const [type, setType] = useState('detect')
-  const [base, setBase] = useState('yoloe-26l-seg.pt')
+  const [base, setBase] = useState('yolo11s.pt')
   const [epochs, setEpochs] = useState(100)
   const [splitVal, setSplitVal] = useState(80)
   const [starting, setStarting] = useState(false)

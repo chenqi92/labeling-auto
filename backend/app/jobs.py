@@ -179,7 +179,9 @@ def _materialize_yolo(pid: str, out_dir: str, train_ratio: float = 0.8) -> tuple
 def _run_training(jid: str, params: dict) -> None:
     pid = params.get("project_id")
     name = params.get("name") or f"train-{jid[:6]}"
-    base = params.get("base", "yoloe-26l-seg.pt")
+    # 用「检测头」基座，匹配 _materialize_yolo 产出的检测标签（cls xc yc w h）。
+    # 不要用 *-seg 权重：那是分割任务，会因标签格式不符在数据集校验阶段报错。
+    base = params.get("base", "yolo11s.pt")
     epochs = int(params.get("epochs", 100))
     imgsz = int(params.get("imgsz", 640))
     batch = int(params.get("batch", 16))
@@ -194,13 +196,17 @@ def _run_training(jid: str, params: dict) -> None:
     from ultralytics import YOLO  # noqa
     os.environ.setdefault("YOLO_CONFIG_DIR", settings.yoloe_config_dir)
     weight = base if os.path.isabs(base) or os.path.exists(base) else os.path.join(settings.yoloe_weights_dir, base)
+    # 不存在的本地路径退回模型名，让 ultralytics 自动下载（如 yolo11s.pt）。
     model = YOLO(weight if os.path.exists(weight) else base)
     t0 = time.time()
 
-    def on_epoch_end(trainer):
+    # 取消检查放 on_train_epoch_end（每轮训练循环后即触发，响应快）。
+    def on_cancel(trainer):
         if _cancelled(jid):
             trainer.stop = True
-            return
+
+    # 指标读取放 on_fit_epoch_end（验证完成后，trainer.metrics 才有 mAP50/95）。
+    def on_fit(trainer):
         ep = int(getattr(trainer, "epoch", 0)) + 1
         m = getattr(trainer, "metrics", {}) or {}
         mp = m.get("metrics/mAP50(B)") or m.get("metrics/mAP50-95(B)") or 0
@@ -209,7 +215,8 @@ def _run_training(jid: str, params: dict) -> None:
         _progress(jid, ep, epochs, metric=f"mAP {float(mp):.3f}" if mp else "训练中", detail=f"epoch {ep}/{epochs}", eta=eta)
         _log(jid, f"epoch {ep}/{epochs}  mAP50 {float(mp):.3f}")
 
-    model.add_callback("on_train_epoch_end", on_epoch_end)
+    model.add_callback("on_train_epoch_end", on_cancel)
+    model.add_callback("on_fit_epoch_end", on_fit)
     _log(jid, "开始训练…")
     model.train(data=os.path.join(work, "dataset", "data.yaml"), epochs=epochs, imgsz=imgsz,
                 batch=batch, project=work, name="run", exist_ok=True, verbose=False)
@@ -266,7 +273,7 @@ class TrainRequest(BaseModel):
     project_id: str
     name: str = ""
     task: str = "detect"
-    base: str = "yoloe-26l-seg.pt"
+    base: str = "yolo11s.pt"
     epochs: int = 100
     imgsz: int = 640
     batch: int = 16

@@ -14,8 +14,9 @@ export default function Jobs() {
   useEffect(() => { refresh(); const t = setInterval(refresh, 2500); return () => clearInterval(t) }, [])
   useEffect(() => {
     if (!detail) return
-    const t = setInterval(() => getJob(detail.id).then(setDetail).catch(() => undefined), 2000)
-    return () => clearInterval(t)
+    let cancelled = false
+    const t = setInterval(() => getJob(detail.id).then((d) => { if (!cancelled) setDetail(d) }).catch(() => undefined), 2000)
+    return () => { cancelled = true; clearInterval(t) }
   }, [detail?.id])
 
   const shown = jobs.filter((j) => filter === 'all' || j.status === filter)

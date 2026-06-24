@@ -133,27 +133,37 @@ def list_classes(pid: str) -> list[ClassOut]:
 
 
 def ensure_class(pid: str, name: str) -> int:
-    """按名字找类别，没有则新建，返回 idx。供检测自动落标用。"""
+    """按名字找类别，没有则新建，返回 idx。供检测自动落标用。
+    读 MAX(idx)+1 与 INSERT 放同一事务并对 (project_id,idx) 主键冲突重试，避免并发分配同号。"""
+    import sqlite3
     name = name.strip() or "object"
-    with get_conn() as conn:
-        row = conn.execute("SELECT idx FROM classes WHERE project_id=? AND name=?", (pid, name)).fetchone()
-        if row is not None:
-            return row["idx"]
-        nxt = conn.execute("SELECT COALESCE(MAX(idx)+1,0) n FROM classes WHERE project_id=?", (pid,)).fetchone()["n"]
-    with tx() as conn:
-        conn.execute("INSERT INTO classes(project_id,idx,name,color) VALUES(?,?,?,?)",
-                     (pid, nxt, name, color_for(nxt)))
-    return nxt
+    for _ in range(6):
+        with tx() as conn:
+            row = conn.execute("SELECT idx FROM classes WHERE project_id=? AND name=?", (pid, name)).fetchone()
+            if row is not None:
+                return row["idx"]
+            nxt = conn.execute("SELECT COALESCE(MAX(idx)+1,0) n FROM classes WHERE project_id=?", (pid,)).fetchone()["n"]
+            try:
+                conn.execute("INSERT INTO classes(project_id,idx,name,color) VALUES(?,?,?,?)", (pid, nxt, name, color_for(nxt)))
+                return nxt
+            except sqlite3.IntegrityError:
+                continue  # 并发占了同一 idx，重试
+    raise HTTPException(500, detail="类别分配冲突，请重试")
 
 
 def add_class(pid: str, name: str, color: str | None = None) -> ClassOut:
-    with get_conn() as conn:
-        nxt = conn.execute("SELECT COALESCE(MAX(idx)+1,0) n FROM classes WHERE project_id=?", (pid,)).fetchone()["n"]
-    col = color or color_for(nxt)
-    with tx() as conn:
-        conn.execute("INSERT INTO classes(project_id,idx,name,color) VALUES(?,?,?,?)",
-                     (pid, nxt, name.strip() or f"class_{nxt}", col))
-    return ClassOut(id=nxt, name=name.strip() or f"class_{nxt}", color=col)
+    import sqlite3
+    for _ in range(6):
+        with tx() as conn:
+            nxt = conn.execute("SELECT COALESCE(MAX(idx)+1,0) n FROM classes WHERE project_id=?", (pid,)).fetchone()["n"]
+            cname = name.strip() or f"class_{nxt}"
+            col = color or color_for(nxt)
+            try:
+                conn.execute("INSERT INTO classes(project_id,idx,name,color) VALUES(?,?,?,?)", (pid, nxt, cname, col))
+                return ClassOut(id=nxt, name=cname, color=col)
+            except sqlite3.IntegrityError:
+                continue
+    raise HTTPException(500, detail="类别分配冲突，请重试")
 
 
 # ---------------- 图片 ----------------
@@ -231,11 +241,12 @@ def apply_detection_boxes(iid: str, boxes: list[dict]) -> int:
 
 def set_annotations(iid: str, anns: list[AnnotationIn]) -> list[AnnotationOut]:
     """整图替换标注（画布去抖保存的最简语义）。同时更新图片状态。"""
-    if image_project(iid) is None:
-        raise HTTPException(404, detail="图片不存在")
     now = time.time()
     out: list[AnnotationOut] = []
     with tx() as conn:
+        # 存在性检查放进事务，消除 TOCTOU：图片若已删，得到干净 404 而非外键 IntegrityError
+        if conn.execute("SELECT 1 FROM images WHERE id=?", (iid,)).fetchone() is None:
+            raise HTTPException(404, detail="图片不存在")
         conn.execute("DELETE FROM annotations WHERE image_id=?", (iid,))
         for a in anns:
             aid = _uid()

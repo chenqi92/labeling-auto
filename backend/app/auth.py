@@ -190,6 +190,12 @@ def seed_admin() -> None:
         return
     create_user(settings.default_admin_user, settings.default_admin_password,
                 settings.default_admin_name, "admin")
+    if settings.default_admin_password == "admin123" and not settings.mock:
+        import logging
+        logging.getLogger("locate-anything").warning(
+            "已用默认口令 admin/admin123 播种管理员账号，请立刻在「用户管理」改密，"
+            "或部署前设置 LA_DEFAULT_ADMIN_PASSWORD 环境变量。"
+        )
 
 
 # ---------------- FastAPI 依赖 ----------------
