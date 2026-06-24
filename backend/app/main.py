@@ -8,7 +8,7 @@ import time
 
 from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from app import auth, db
@@ -405,6 +405,20 @@ def export_yolo(req: ExportRequest, _: UserOut = Depends(require_editor)) -> Res
 
 
 # —— 可选：生产模式下托管已构建的前端 ——
+# 哈希命名的 assets 长缓存；index.html 走 no-store，保证每次刷新都拿到最新外壳→最新 JS，
+# 避免部署后浏览器仍跑旧缓存的页面（上传等改动看不到）。
 _DIST = os.path.join(os.path.dirname(__file__), "..", "..", "frontend", "dist")
 if os.path.isdir(_DIST):
-    app.mount("/", StaticFiles(directory=_DIST, html=True), name="frontend")
+    _ASSETS = os.path.join(_DIST, "assets")
+    if os.path.isdir(_ASSETS):
+        app.mount("/assets", StaticFiles(directory=_ASSETS), name="assets")
+
+    @app.get("/{full_path:path}")
+    def _spa(full_path: str) -> FileResponse:
+        if full_path.startswith("api"):
+            raise HTTPException(status_code=404, detail="未找到")
+        candidate = os.path.join(_DIST, full_path)
+        if full_path and os.path.isfile(candidate):
+            return FileResponse(candidate)  # favicon 等真实根文件
+        return FileResponse(os.path.join(_DIST, "index.html"),
+                            headers={"Cache-Control": "no-store, must-revalidate"})

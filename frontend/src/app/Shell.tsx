@@ -20,7 +20,7 @@ export default function Shell() {
             <div style={{ flex: 1 }} />
             <div style={{ borderTop: '1px solid var(--border-soft)', paddingTop: 11, marginTop: 8 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '7px 10px', fontSize: 11, color: 'var(--text3)' }}>
-                <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--green)' }} />内网 · 在线 · v2.4.0
+                <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--green)' }} />内网 · 在线 · v2.4.1 上传修复
               </div>
             </div>
           </div>
