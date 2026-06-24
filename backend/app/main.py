@@ -209,7 +209,7 @@ def detect(req: DetectRequest, _: UserOut = Depends(require_editor)) -> DetectRe
     if yoloe.is_yoloe(engine_key):
         if req.task != "detection":
             raise HTTPException(status_code=400, detail="YOLOE 引擎仅支持「目标检测」任务")
-        cats = [c.strip() for c in re.split(r"[，,、]", query) if c.strip()]
+        cats = [c.strip() for c in re.split(r"[，,、\s]+", query) if c.strip()]
         if not cats:
             raise HTTPException(status_code=400, detail="目标检测需要至少一个类别")
         t0 = time.perf_counter()
@@ -247,7 +247,7 @@ def detect(req: DetectRequest, _: UserOut = Depends(require_editor)) -> DetectRe
     try:
         if req.task == "detection":
             # 兼容半/全角逗号、顿号分隔（前端标签输入已规范化，这里再兜底一次）
-            cats = [c.strip() for c in re.split(r"[，,、]", query) if c.strip()]
+            cats = [c.strip() for c in re.split(r"[，,、\s]+", query) if c.strip()]
             if not cats:
                 raise HTTPException(status_code=400, detail="目标检测需要至少一个类别")
             # 逐类检测，保证每个框带正确标签

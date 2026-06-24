@@ -241,7 +241,11 @@ export const useData = create<DataState>()((set, get) => ({
     const chain: Promise<void> = prev.then(async () => {
       const saved = await papi.setAnnotations(iid, list)
       if (saveChains[iid] === chain) set((s) => ({ anns: { ...s.anns, [iid]: saved } }))
-    }).catch(() => undefined)
+    }).catch((e) => {
+      // 保存失败不能静默吞掉：提示用户并从服务端重载，避免乐观状态与后端不一致导致刷新丢标注
+      try { window.alert(`标注保存失败：${(e as Error).message}`) } catch { /* */ }
+      void get().loadAnnotations(iid)
+    })
     saveChains[iid] = chain
     await chain
   },
@@ -301,9 +305,11 @@ export const useData = create<DataState>()((set, get) => ({
 }))
 
 // 选择器
+// 稳定空数组：未选图/无标注时返回同一引用，避免 Zustand v5 + React 19 每次新建 [] 触发无限更新(#185)
+const EMPTY_ANNS: Ann[] = []
 export const selProject = (s: DataState): ProjectInfo | null =>
   s.projects.find((p) => p.id === s.activeProjectId) ?? null
 export const selActiveAnns = (s: DataState): Ann[] =>
-  s.activeImageId ? s.anns[s.activeImageId] ?? [] : []
+  (s.activeImageId ? s.anns[s.activeImageId] : undefined) ?? EMPTY_ANNS
 export const selActiveImage = (s: DataState): ProjImage | null =>
   s.images.find((i) => i.id === s.activeImageId) ?? null

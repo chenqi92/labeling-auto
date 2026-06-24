@@ -1,12 +1,20 @@
-/** 顶栏：logo · 项目切换 · 搜索 · GPU 状态灯 · 通知 · 主题 · 用户菜单。
- *  项目数据来自 store.ts；会话/主题/菜单来自 appStore。GPU 显存看板在 Phase 4 接真实遥测。 */
+/** 顶栏：logo · 项目切换 · 搜索 · GPU 状态灯 · 通知 · 主题 · 用户菜单。 */
+import { useEffect, useState } from 'react'
 import { useApp } from '../appStore'
 import { useData } from '../dataStore'
 import { logout as apiLogout } from '../authApi'
+import { getGpu, type GpuInfo } from '../api2'
 import { Icon, Svg } from './ui'
 
 export default function TopBar() {
   const { user, theme, openMenu } = useApp()
+  const [gpu, setGpu] = useState<GpuInfo | null>(null)
+  useEffect(() => {
+    if (openMenu !== 'gpu') return
+    getGpu().then(setGpu).catch(() => undefined)
+    const t = setInterval(() => getGpu().then(setGpu).catch(() => undefined), 4000)
+    return () => clearInterval(t)
+  }, [openMenu])
   const toggleTheme = useApp((s) => s.toggleTheme)
   const setMenu = useApp((s) => s.setMenu)
   const goView = useApp((s) => s.goView)
@@ -98,10 +106,24 @@ export default function TopBar() {
               <div style={{ fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: gpuColor }} />{gpuStatus}</div>
               <div style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>NVIDIA · 单卡</div>
             </div>
-            <div style={{ fontSize: 11.5, color: 'var(--text3)', lineHeight: 1.6, marginBottom: 12 }}>
-              检测引擎：{model.state === 'ready' ? `${model.engine || 'LocateAnything'} 已就绪（${model.device || 'cuda'} · ${model.dtype || ''}）` : '未常驻'}
-            </div>
-            <div style={{ fontSize: 11, color: 'var(--amber)', background: 'var(--amber-g)', borderRadius: 7, padding: '8px 10px', lineHeight: 1.5 }}>实时显存看板将在「模型管理」接入逐模型占用与互斥关系。</div>
+            {gpu && gpu.gpu_used_gb != null ? (
+              <>
+                <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 6, display: 'flex', justifyContent: 'space-between' }}>
+                  <span>显存占用</span><span style={{ fontFamily: 'var(--mono)', color: 'var(--text2)' }}>{gpu.gpu_used_gb} / {gpu.gpu_total_gb} GB</span>
+                </div>
+                <div style={{ height: 8, background: 'var(--panel2)', borderRadius: 5, overflow: 'hidden', marginBottom: 10 }}>
+                  <div style={{ height: '100%', width: `${Math.min(100, ((gpu.gpu_used_gb ?? 0) / gpu.gpu_total_gb) * 100)}%`, background: 'linear-gradient(90deg,var(--accent),var(--accent-dim))', borderRadius: 5 }} />
+                </div>
+                <div style={{ fontSize: 11.5, color: 'var(--text3)', lineHeight: 1.6, marginBottom: 12 }}>
+                  利用率 {gpu.gpu_util_pct != null ? `${gpu.gpu_util_pct}%` : '—'} · 常驻 {gpu.loaded?.length ?? 0} 个模型{gpu.loaded?.length ? '：' + gpu.loaded.join('、') : ''}
+                </div>
+              </>
+            ) : (
+              <div style={{ fontSize: 11.5, color: 'var(--text3)', lineHeight: 1.6, marginBottom: 12 }}>
+                {gpu ? '未读到 GPU 遥测（无 nvidia-smi/pynvml）' : '读取 GPU 状态中…'} · 检测引擎{model.state === 'ready' ? '已就绪' : '未常驻'}
+              </div>
+            )}
+            <div style={{ fontSize: 11, color: 'var(--amber)', background: 'var(--amber-g)', borderRadius: 7, padding: '8px 10px', lineHeight: 1.5 }}>大模型（LocateAnything / VQA）互斥，切换能力时自动卸载错峰。</div>
             <button onClick={() => goView('registry')} style={{ width: '100%', marginTop: 11, background: 'var(--panel2)', border: '1px solid var(--border)', borderRadius: 8, padding: 9, fontSize: 12.5, color: 'var(--text)', cursor: 'pointer' }}>打开显存看板 / 模型管理</button>
           </div>
         )}

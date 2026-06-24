@@ -185,11 +185,16 @@ def user_for_token(token: str) -> UserOut | None:
 
 
 def seed_admin() -> None:
-    """首次启动且无任何用户时，播种默认管理员。"""
+    """首次启动且无任何用户时，播种默认管理员 + 一个演示标注员（对应登录页快捷入口）。"""
     if count_users() > 0:
         return
     create_user(settings.default_admin_user, settings.default_admin_password,
                 settings.default_admin_name, "admin")
+    # 登录页「标注员」快捷入口用 annotator/demo1234，这里同步播种，否则点了 401
+    try:
+        create_user("annotator", "demo1234", "李标注", "user")
+    except Exception:  # noqa: BLE001
+        pass
     if settings.default_admin_password == "admin123" and not settings.mock:
         import logging
         logging.getLogger("locate-anything").warning(

@@ -9,10 +9,19 @@ from PIL import Image
 BASE = sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:8123"
 
 
+ADMIN_USER = "admin"
+ADMIN_PASS = "admin123"
+
+
 def main() -> int:
-    # health / tasks
-    assert requests.get(f"{BASE}/api/health").json()["ok"] is True
-    tasks = requests.get(f"{BASE}/api/tasks").json()["tasks"]
+    s = requests.Session()
+    # health / tasks（公开）
+    assert s.get(f"{BASE}/api/health").json()["ok"] is True
+    # 登录拿令牌（其余 /api 已要求鉴权）
+    tok = s.post(f"{BASE}/api/auth/login", json={"username": ADMIN_USER, "password": ADMIN_PASS}).json()["token"]
+    s.headers["Authorization"] = f"Bearer {tok}"
+    assert s.get(f"{BASE}/api/health").json()["ok"] is True
+    tasks = s.get(f"{BASE}/api/tasks").json()["tasks"]
     assert any(t["key"] == "detection" for t in tasks), "缺少 detection 任务"
     print("health/tasks OK ->", [t["key"] for t in tasks])
 
@@ -22,7 +31,7 @@ def main() -> int:
         buf = io.BytesIO()
         Image.new("RGB", size, (40 + i * 30, 80, 160)).save(buf, "PNG")
         buf.seek(0)
-        r = requests.post(
+        r = s.post(
             f"{BASE}/api/images",
             files={"files": (f"pic{i}.png", buf, "image/png")},
         )
@@ -33,12 +42,12 @@ def main() -> int:
     print("upload OK ->", ids)
 
     # 列表接口应能取回刚上传的图片（刷新恢复用）
-    listed = {m["id"] for m in requests.get(f"{BASE}/api/images").json()}
+    listed = {m["id"] for m in s.get(f"{BASE}/api/images").json()}
     assert set(ids) <= listed, "list 接口缺少刚上传的图片"
     print("list OK ->", len(listed), "images on server")
 
     # 检测（mock 引擎，按 query 确定性返回框）
-    r = requests.post(
+    r = s.post(
         f"{BASE}/api/detect",
         json={"image_id": ids[0], "query": "person, car", "task": "detection"},
     )
@@ -73,7 +82,7 @@ def main() -> int:
         ],
         "train_ratio": 0.8,
     }
-    r = requests.post(f"{BASE}/api/export/yolo", json=export_req)
+    r = s.post(f"{BASE}/api/export/yolo", json=export_req)
     r.raise_for_status()
     assert r.headers["content-type"] == "application/zip"
     z = zipfile.ZipFile(io.BytesIO(r.content))
@@ -104,7 +113,7 @@ def main() -> int:
     print("\ndata.yaml:\n" + data_yaml)
 
     # 缺失图片应报 410（而非静默导出空集）
-    r = requests.post(
+    r = s.post(
         f"{BASE}/api/export/yolo",
         json={
             "dataset_name": "x",
@@ -116,7 +125,7 @@ def main() -> int:
     print("missing-image export -> 410 OK")
 
     # 越界 class_id 应被跳过（nc=1 时 class_id=5 不应出现在 label 里）
-    r = requests.post(
+    r = s.post(
         f"{BASE}/api/export/yolo",
         json={
             "dataset_name": "y",

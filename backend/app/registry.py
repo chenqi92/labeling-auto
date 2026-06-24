@@ -249,7 +249,9 @@ def api_load(req: ModelAction, _: UserOut = Depends(require_admin)) -> dict:
             urllib.request.urlopen(urllib.request.Request(f"{base}/api/generate", data=body, headers={"Content-Type": "application/json"}), timeout=settings.vqa_timeout)
         elif it["kind"] == "yoloe":
             from app import segment
-            segment._ensure_seg(segment.DEFAULT_SEG)
+            # 加载该模型对应的具体变体，而非永远加载默认 L（否则点「加载 YOLOE-26-S」却装了 L）
+            variant = next((k for k, v in segment.SEG_VARIANTS.items() if v == it.get("weight")), segment.DEFAULT_SEG)
+            segment._ensure_seg(variant)
     except Exception as e:  # noqa: BLE001
         raise HTTPException(500, detail=f"加载失败：{e}")
     return {"ok": True}

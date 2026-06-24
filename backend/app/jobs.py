@@ -139,6 +139,7 @@ def _run_batch(jid: str, params: dict) -> None:
     from app.schemas import DetectRequest, InspectRequest, RecognizeRequest
 
     ok = fail = 0
+    items: list[dict] = []  # 收集每图结果，落到任务 result，避免 VQA/OCR 结果被丢弃
     for i, im in enumerate(imgs):
         if _cancelled(jid):
             raise _Cancelled()
@@ -148,17 +149,21 @@ def _run_batch(jid: str, params: dict) -> None:
                                                  task="detection", engine=params.get("engine", "la"),
                                                  mode=params.get("mode")))
                 boxes = [{"label": b.label, "x1": b.x1, "y1": b.y1, "x2": b.x2, "y2": b.y2, "score": b.score} for b in res.boxes]
-                P.apply_detection_boxes(im.id, boxes)
+                n = P.apply_detection_boxes(im.id, boxes)
+                items.append({"image_id": im.id, "filename": im.filename, "boxes": n})
             elif cap == "vqa":
-                route_inspect(InspectRequest(image_id=im.id, query=params.get("query", "")))
+                r = route_inspect(InspectRequest(image_id=im.id, query=params.get("query", "")))
+                items.append({"image_id": im.id, "filename": im.filename,
+                              "answers": [a.model_dump() for a in r.answers]})
             elif cap == "ocr":
-                route_recognize(RecognizeRequest(image_id=im.id))
+                r = route_recognize(RecognizeRequest(image_id=im.id))
+                items.append({"image_id": im.id, "filename": im.filename, "text": (r.text or "")[:2000]})
             ok += 1
         except Exception as e:  # noqa: BLE001
             fail += 1
             _log(jid, f"{im.filename} 失败：{e}")
         _progress(jid, i + 1, total, metric=f"成功 {ok} / 失败 {fail}", detail=im.filename)
-    _update(jid, result=json.dumps({"ok": ok, "fail": fail}))
+    _update(jid, result=json.dumps({"ok": ok, "fail": fail, "items": items[:1000]}, ensure_ascii=False))
     _log(jid, f"完成 · 成功 {ok} 失败 {fail}")
 
 
