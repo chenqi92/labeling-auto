@@ -24,3 +24,6 @@ opencv-python-headless
 lmdb
 requests
 packaging
+
+# 可选检测引擎 YOLOE-26（ultralytics）不在基础依赖里：仅启用该引擎时按需安装，
+# 版本固定见 deploy/setup_yoloe.sh（ULTRALYTICS_VER）。VQA 走本机 Ollama，无 Python 依赖。

@@ -13,14 +13,16 @@ WEIGHTS_DIR="${YOLOE_WEIGHTS_DIR:-/data/ultralytics/weights}"
 CONFIG_DIR="${YOLO_CONFIG_DIR:-/data/ultralytics}"
 PROXY="${YOLOE_PROXY:-http://127.0.0.1:1081}"
 VARIANTS="${YOLOE_VARIANTS:-yoloe-26l-seg.pt yoloe-26s-seg.pt}"
+# 已在 Python 3.14 + Blackwell(sm_120) 验证可用的版本；干净机器装此版本以复现线上环境。
+ULTRALYTICS_VER="${YOLOE_ULTRALYTICS_VER:-8.4.70}"
 
 say() { echo "[setup_yoloe] $*"; }
 
 mkdir -p "$WEIGHTS_DIR" "$CONFIG_DIR"
 
-say "确保 ultralytics 已安装"
+say "确保 ultralytics 已安装（已装则不动，干净机器装 ==$ULTRALYTICS_VER）"
 "$PY" -c "import ultralytics" 2>/dev/null \
-  || HTTPS_PROXY="$PROXY" HTTP_PROXY="$PROXY" "$APP/.venv/bin/pip" install -q ultralytics
+  || HTTPS_PROXY="$PROXY" HTTP_PROXY="$PROXY" "$APP/.venv/bin/pip" install -q "ultralytics==$ULTRALYTICS_VER"
 
 say "预取权重 + 文本编码器（首次约几十~两百MB，走代理 $PROXY）"
 cd "$APP/backend"  # 让 mobileclip2_b.ts 落到服务工作目录
